@@ -132,26 +132,26 @@ def _format_month_label(month_key: str) -> str:
 
 def _detect_installment_info(title: str) -> Optional[dict[str, Any]]:
     """
-    Detecta padrões de compra parcelada na descrição da fatura:
-    Ex: 'AMAZON BR *Amazon BR Parcela 1 de 2' ou 'Mercado Livre Parcela 2/6' ou 'Kabum Parc 3 de 10'
+    Detecta padrões de compra parcelada na descrição da fatura (sem limite máximo de parcelas):
+    Ex: 'AMAZON BR *Amazon BR Parcela 1 de 2', 'Mercado Livre Parcela 2/6', 'Financiamento Parcela 15 de 120'
     """
     m = re.search(
-        r"(?:parcela|parc\.?)\s*(\d{1,2})\s*(?:de|/)\s*(\d{1,2})",
+        r"(?:parcela|parc\.?)\s*(\d+)\s*(?:de|/)\s*(\d+)",
         title or "",
         re.IGNORECASE,
     )
     if not m:
-        m = re.search(r"\[PARCELADO\s*(\d{1,2})/(\d{1,2})\]", title or "", re.IGNORECASE)
+        m = re.search(r"\[PARCELADO\s*(\d+)/(\d+)\]", title or "", re.IGNORECASE)
     if not m:
         return None
 
     curr_inst = int(m.group(1))
     total_inst = int(m.group(2))
-    if total_inst < 2 or curr_inst < 1 or curr_inst > total_inst:
+    if total_inst < 1 or curr_inst < 1 or curr_inst > total_inst:
         return None
 
     clean_title = re.sub(
-        r"\s*[\(\[]?(?:parcela|parc\.?)\s*\d{1,2}\s*(?:de|/)\s*\d{1,2}[\)\]]?",
+        r"\s*[\(\[]?(?:parcela|parc\.?)\s*\d+\s*(?:de|/)\s*\d+[\)\]]?",
         "",
         title,
         flags=re.IGNORECASE,

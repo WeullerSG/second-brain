@@ -86,7 +86,7 @@ class InstallmentCreate(BaseModel):
     title: str
     installment_amount: float
     current_installment: int = Field(default=1, ge=1)
-    total_installments: int = Field(default=2, ge=2, le=72)
+    total_installments: int = Field(default=2, ge=1)
     account_name: str = "Cartão Mercado Pago Visa"
     category: str = "parcelado"
     first_due_date: Optional[str] = None

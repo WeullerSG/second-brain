@@ -92,6 +92,7 @@ export default function App() {
   // Duralux Skin State (Light Mode by default, like duralux-react-dashboard.vercel.app, with Dark Skin toggle)
   const [darkMode, setDarkMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
   const [loading, setLoading] = useState(false);
 
@@ -483,7 +484,133 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col md:flex-row ${bgCanvas} transition-colors duration-200`}>
+    <div className={`min-h-screen w-full overflow-x-hidden flex flex-col md:flex-row ${bgCanvas} transition-colors duration-200`}>
+      {/* =====================================================================
+          MOBILE SLIDE-OVER DRAWER MENU (< md)
+      ====================================================================== */}
+      {mobileMenuOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <div
+            className={`relative w-[280px] max-w-[82vw] h-full flex flex-col justify-between p-4 overflow-y-auto z-10 border-r shadow-2xl ${
+              darkMode
+                ? "bg-[#182235] border-slate-800 text-slate-100"
+                : "bg-white border-slate-200 text-[#283c50]"
+            }`}
+          >
+            <div className="space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#3454d1] flex items-center justify-center text-white font-extrabold text-base">
+                    B
+                  </div>
+                  <div className="leading-tight">
+                    <div className="font-extrabold text-sm tracking-wider uppercase">
+                      SECOND <span className="text-[#3454d1]">BRAIN</span>
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                      Duralux Mobile
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Busca rápida no menu mobile */}
+              <div
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${inputSurface}`}
+              >
+                <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <input
+                  type="text"
+                  value={memorySearch}
+                  onChange={(e) => setMemorySearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      refreshAll();
+                      setActiveTab("memory");
+                      setMobileMenuOpen(false);
+                    }
+                  }}
+                  placeholder="Buscar memórias ou RAG..."
+                  className="bg-transparent focus:outline-none w-full text-xs"
+                />
+              </div>
+
+              {/* Seletor de modelo IA no mobile */}
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Modelo Gemini Ativo
+                </label>
+                <select
+                  value={selectedModel}
+                  onChange={(e) => setSelectedModel(e.target.value)}
+                  className={`w-full text-xs font-semibold rounded-lg px-2.5 py-2 border focus:outline-none ${inputSurface}`}
+                >
+                  <option value="gemini-3.5-flash-lite">🚀 gemini-3.5-flash-lite</option>
+                  <option value="gemini-3.8-flash">⚡ gemini-3.8-flash</option>
+                  <option value="gemini-4-argon">🧠 gemini-4-argon</option>
+                </select>
+              </div>
+
+              {/* Lista completa de seções */}
+              <div className="space-y-1 pt-1">
+                {[
+                  { id: "overview", label: "Visão Geral (Dashboard)", icon: LayoutDashboard },
+                  { id: "chat", label: "Agente Gemini AI", icon: MessageSquare },
+                  { id: "agenda", label: "Agenda & Notificações", icon: Calendar },
+                  { id: "finances", label: "Finanças & Cartões", icon: Wallet },
+                  { id: "academic", label: "Faculdade & Prazos", icon: GraduationCap },
+                  { id: "memory", label: "Memória Core & RAG", icon: Database },
+                  { id: "telemetry", label: "Monitoramento & Uso", icon: Activity },
+                ].map((item) => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id as ActiveTab);
+                        setMobileMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-xs font-bold transition-all ${
+                        active
+                          ? "bg-[#3454d1] text-white shadow-xs"
+                          : darkMode
+                          ? "text-slate-300 hover:bg-slate-800"
+                          : "text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 shrink-0" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+              <a
+                href={api.getFineTuneExportUrl()}
+                download="second_brain_gemini_finetune.jsonl"
+                className="w-full py-2.5 px-3 rounded-lg bg-[#3454d1]/10 text-[#3454d1] font-bold text-xs flex items-center justify-center gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Baixar Dataset SFT (.jsonl)
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =====================================================================
           DURALUX SIDEBAR NAVIGATION (nxl-navigation)
       ====================================================================== */}
@@ -678,17 +805,44 @@ export default function App() {
       {/* =====================================================================
           MAIN CONTENT WRAPPER (Header + Subheader + Page Viewport)
       ====================================================================== */}
-      <div className="flex-1 flex flex-col min-w-0 pb-20 md:pb-8">
-        {/* DURALUX TOP HEADER BAR (h-16) */}
+      <div className="flex-1 flex flex-col min-w-0 pb-24 md:pb-8">
+        {/* DURALUX TOP HEADER BAR (h-14 md:h-16) */}
         <header
-          className={`h-16 px-4 md:px-6 border-b flex items-center justify-between sticky top-0 z-20 ${
+          className={`h-14 md:h-16 px-3 sm:px-4 md:px-6 border-b flex items-center justify-between gap-2 sticky top-0 z-20 ${
             darkMode
               ? "bg-[#182235]/95 border-slate-800"
               : "bg-white/95 border-slate-200/90"
           } backdrop-blur`}
         >
-          {/* Left Controls: Hamburger + Search + Mega CTA */}
-          <div className="flex items-center gap-3">
+          {/* Left Controls: Mobile Drawer Button + Brand / Desktop Hamburger + Search + Mega CTA */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {/* Mobile Hamburger Button */}
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className={`md:hidden p-2 rounded-lg border shrink-0 transition-colors ${
+                darkMode
+                  ? "border-slate-700 hover:bg-slate-800 text-slate-300"
+                  : "border-slate-200 hover:bg-slate-100 text-slate-600"
+              }`}
+              title="Abrir menu"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+
+            {/* Mobile Compact Brand Logo */}
+            <div
+              onClick={() => setActiveTab("overview")}
+              className="md:hidden flex items-center gap-2 cursor-pointer min-w-0"
+            >
+              <div className="w-7 h-7 rounded-lg bg-[#3454d1] flex items-center justify-center text-white font-extrabold text-xs shrink-0">
+                B
+              </div>
+              <span className="font-extrabold text-xs tracking-wider uppercase truncate">
+                SECOND<span className="text-[#3454d1]">BRAIN</span>
+              </span>
+            </div>
+
+            {/* Desktop Sidebar Collapse Button */}
             <button
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
               className={`hidden md:flex p-2 rounded-lg border transition-colors ${
@@ -702,9 +856,9 @@ export default function App() {
             </button>
 
             <div
-              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs w-64 ${inputSurface}`}
+              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs w-48 lg:w-64 ${inputSurface}`}
             >
-              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
               <input
                 type="text"
                 value={memorySearch}
@@ -730,15 +884,15 @@ export default function App() {
           </div>
 
           {/* Right Controls: Model Pill + Theme Skin Toggle + Notifications + Profile */}
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <select
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
-              className={`text-xs font-semibold rounded-lg px-2.5 py-1.5 border focus:outline-none ${inputSurface}`}
+              className={`hidden sm:block text-xs font-semibold rounded-lg px-2.5 py-1.5 border focus:outline-none ${inputSurface}`}
             >
+              <option value="gemini-3.5-flash-lite">🚀 gemini-3.5-flash-lite</option>
               <option value="gemini-3.8-flash">⚡ gemini-3.8-flash</option>
               <option value="gemini-4-argon">🧠 gemini-4-argon</option>
-              <option value="gemini-3.5-flash-lite">🚀 gemini-3.5-flash-lite</option>
             </select>
 
             {/* Light / Dark Skin Toggle (Duralux Header Feature) */}
@@ -784,15 +938,15 @@ export default function App() {
 
             {/* User Profile Chip */}
             <div
-              className={`flex items-center gap-2.5 pl-2.5 border-l ${
+              className={`flex items-center gap-2 pl-2 border-l ${
                 darkMode ? "border-slate-800" : "border-slate-200"
               }`}
             >
               <div className="relative">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#3454d1] to-[#3dc7be] text-white font-bold text-xs flex items-center justify-center">
+                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#3454d1] to-[#3dc7be] text-white font-bold text-xs flex items-center justify-center">
                   W
                 </div>
-                <span className="w-2.5 h-2.5 rounded-full bg-[#17c666] border-2 border-white dark:border-slate-900 absolute -bottom-0.5 -right-0.5" />
+                <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#17c666] border-2 border-white dark:border-slate-900 absolute -bottom-0.5 -right-0.5" />
               </div>
               <div className="hidden sm:block leading-tight">
                 <div className="text-xs font-bold">Weuller</div>
@@ -806,44 +960,44 @@ export default function App() {
 
         {/* DURALUX SUB-HEADER / BREADCRUMB BAR (page-header) */}
         <div
-          className={`px-4 md:px-6 py-3.5 border-b flex flex-wrap items-center justify-between gap-3 ${
+          className={`px-3 sm:px-4 md:px-6 py-2.5 sm:py-3.5 border-b flex flex-wrap items-center justify-between gap-2 ${
             darkMode
               ? "bg-[#182235]/60 border-slate-800"
               : "bg-white border-slate-200/80"
           }`}
         >
-          <div className="flex items-center gap-3">
-            <h1 className="font-bold text-base tracking-tight">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <h1 className="font-bold text-sm sm:text-base tracking-tight truncate">
               {tabTitles[activeTab].title}
             </h1>
-            <span className="text-slate-300 dark:text-slate-700">|</span>
-            <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium">
+            <span className="hidden sm:inline text-slate-300 dark:text-slate-700">|</span>
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 font-medium truncate">
               <span>Home</span>
-              <ChevronRight className="w-3.5 h-3.5" />
-              <span className="text-[#3454d1] font-semibold">
+              <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+              <span className="text-[#3454d1] font-semibold truncate">
                 {tabTitles[activeTab].section}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setActiveTab("memory")}
-              className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+              className={`px-2.5 sm:px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 transition-colors ${
                 darkMode
                   ? "border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200"
                   : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
               }`}
             >
-              <Upload className="w-3.5 h-3.5 text-[#3454d1]" />
-              Enviar Arquivo RAG
+              <Upload className="w-3.5 h-3.5 text-[#3454d1] shrink-0" />
+              <span className="hidden xs:inline sm:inline">Arquivo</span> RAG
             </button>
             <button
               onClick={() => setActiveTab("chat")}
-              className="px-3.5 py-1.5 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-colors"
+              className="px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white text-[11px] sm:text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" />
-              Novo Comando IA
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              Comando IA
             </button>
           </div>
         </div>
@@ -1091,27 +1245,71 @@ export default function App() {
               {/* Tabela de Contas de Cartão e Lançamentos (7 colunas) */}
               <div className={`lg:col-span-7 duralux-card rounded-xl border ${cardSurface}`}>
                 <div
-                  className={`px-6 py-4 border-b flex items-center justify-between ${
+                  className={`px-4 sm:px-6 py-4 border-b flex items-center justify-between gap-2 ${
                     darkMode ? "border-slate-800" : "border-slate-100"
                   }`}
                 >
-                  <div>
-                    <h3 className="font-bold text-[15px]">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm sm:text-[15px] truncate">
                       Últimas Contas de Cartão & Lançamentos
                     </h3>
                     <p className="text-xs text-slate-400">
-                      Clique no status para alternar entre Pendente e Pago
+                      Toque no status para alternar entre Pendente e Pago
                     </p>
                   </div>
                   <button
                     onClick={() => setActiveTab("finances")}
-                    className="text-xs font-bold text-[#3454d1] hover:underline flex items-center gap-1"
+                    className="text-xs font-bold text-[#3454d1] hover:underline flex items-center gap-1 shrink-0"
                   >
                     Ver Tudo <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* Lista Mobile Compacta (< md) */}
+                <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                  {(finance?.records ?? []).slice(0, 6).map((rec) => (
+                    <div key={rec.id} className="p-3.5 flex items-center justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-xs truncate">{rec.title}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 flex flex-wrap items-center gap-1.5">
+                          <span>{rec.account_name}</span>
+                          <span>•</span>
+                          <span>{rec.due_date || "—"}</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span
+                          className={`text-xs font-extrabold whitespace-nowrap ${
+                            rec.record_type === "income"
+                              ? "text-[#17c666]"
+                              : "text-[#ea4d4d]"
+                          }`}
+                        >
+                          {rec.record_type === "income" ? "+" : "-"} R${" "}
+                          {rec.amount.toFixed(2)}
+                        </span>
+                        <button
+                          onClick={async () => {
+                            await api.updateFinanceRecord(rec.id, {
+                              status: rec.status === "paid" ? "pending" : "paid",
+                            });
+                            refreshAll();
+                          }}
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            rec.status === "paid"
+                              ? "bg-[#17c666]/15 text-[#17c666]"
+                              : "bg-[#ffa21d]/15 text-[#ffa21d]"
+                          }`}
+                        >
+                          {rec.status === "paid" ? "Pago" : "Pendente"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tabela Desktop (>= md) */}
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr
@@ -1142,7 +1340,7 @@ export default function App() {
                             {rec.due_date || "—"}
                           </td>
                           <td
-                            className={`py-3.5 px-4 font-extrabold ${
+                            className={`py-3.5 px-4 font-extrabold whitespace-nowrap ${
                               rec.record_type === "income"
                                 ? "text-[#17c666]"
                                 : "text-[#ea4d4d]"
@@ -1178,12 +1376,12 @@ export default function App() {
               {/* Card de Atividades da Faculdade & Memórias Recentes (5 colunas) */}
               <div className={`lg:col-span-5 duralux-card rounded-xl border ${cardSurface}`}>
                 <div
-                  className={`px-6 py-4 border-b flex items-center justify-between ${
+                  className={`px-4 sm:px-6 py-4 border-b flex items-center justify-between gap-2 ${
                     darkMode ? "border-slate-800" : "border-slate-100"
                   }`}
                 >
-                  <div>
-                    <h3 className="font-bold text-[15px]">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-sm sm:text-[15px]">
                       Prazos da Faculdade & Projetos
                     </h3>
                     <p className="text-xs text-slate-400">
@@ -1192,20 +1390,20 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => setActiveTab("academic")}
-                    className="text-xs font-bold text-[#3454d1] hover:underline flex items-center gap-1"
+                    className="text-xs font-bold text-[#3454d1] hover:underline flex items-center gap-1 shrink-0"
                   >
                     Gerenciar <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="p-5 space-y-3.5">
+                <div className="p-4 sm:p-5 space-y-3.5">
                   {tasks.slice(0, 5).map((t) => (
                     <div
                       key={t.id}
-                      className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 ${subtleSurface}`}
+                      className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${subtleSurface}`}
                     >
                       <div className="min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-[#3454d1]/10 text-[#3454d1]">
                             {t.subject}
                           </span>
@@ -1219,11 +1417,11 @@ export default function App() {
                             {t.priority}
                           </span>
                         </div>
-                        <div className="font-bold text-xs mt-1.5 truncate">
+                        <div className="font-bold text-xs mt-1.5 break-words">
                           {t.title}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
+                          <Clock className="w-3 h-3 shrink-0" />
                           Entrega: {t.due_date || "Sem data"}
                         </div>
                       </div>
@@ -1236,7 +1434,7 @@ export default function App() {
                           });
                           refreshAll();
                         }}
-                        className={`text-[11px] font-bold rounded-lg px-2.5 py-1.5 border ${inputSurface}`}
+                        className={`w-full sm:w-auto text-[11px] font-bold rounded-lg px-2.5 py-1.5 border shrink-0 ${inputSurface}`}
                       >
                         <option value="todo">Pendente</option>
                         <option value="in_progress">Andamento</option>
@@ -1254,9 +1452,28 @@ export default function App() {
             VIEW 2: GEMINI CHAT AGENT (DURALUX APPS > CHAT LAYOUT)
         ==================================================================== */}
         {activeTab === "chat" && (
-          <div className="p-4 md:p-6 max-w-[1440px] w-full mx-auto flex-1 flex flex-col lg:flex-row gap-6">
-            {/* Painel Lateral Esquerdo Estilo Duralux Chat Sidebar */}
-            <div className={`lg:w-80 shrink-0 duralux-card rounded-xl border p-5 space-y-5 ${cardSurface}`}>
+          <div className="p-3 sm:p-4 md:p-6 max-w-[1440px] w-full mx-auto flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6">
+            {/* Barra Horizontal de Comandos Rápidos no Mobile (< lg) */}
+            <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+              {[
+                "Qual o valor do meu salário?",
+                "Quanto vai sobrar do meu salário?",
+                "O que tem parcelado nas faturas?",
+                "Gastei R$ 64,90 no iFood hoje",
+                "Resumo completo das contas e faculdade",
+              ].map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => handleSendMessage(prompt)}
+                  className={`shrink-0 text-xs px-3 py-2 rounded-full border font-semibold transition-all active:scale-95 ${cardSurface}`}
+                >
+                  ✨ {prompt}
+                </button>
+              ))}
+            </div>
+
+            {/* Painel Lateral Esquerdo Estilo Duralux Chat Sidebar (Desktop >= lg) */}
+            <div className={`hidden lg:block lg:w-80 shrink-0 duralux-card rounded-xl border p-5 space-y-5 ${cardSurface}`}>
               <div>
                 <h3 className="font-bold text-sm flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#3454d1]" />
@@ -1313,27 +1530,27 @@ export default function App() {
             {/* Área Principal de Mensagens Duralux Chat */}
             <div className={`flex-1 duralux-card rounded-xl border flex flex-col overflow-hidden ${cardSurface}`}>
               <div
-                className={`px-6 py-4 border-b flex items-center justify-between ${
+                className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b flex items-center justify-between gap-2 ${
                   darkMode ? "border-slate-800" : "border-slate-100"
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[#3454d1] text-white flex items-center justify-center font-bold">
+                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#3454d1] text-white flex items-center justify-center font-bold text-xs sm:text-sm shrink-0">
                     AI
                   </div>
-                  <div>
-                    <div className="font-bold text-sm">
+                  <div className="min-w-0">
+                    <div className="font-bold text-xs sm:text-sm truncate">
                       Second Brain Agent ({selectedModel})
                     </div>
-                    <div className="text-[11px] text-[#17c666] font-semibold flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-[#17c666]" />
-                      Online • 8 Tools Ativas + Busca Híbrida RAG
+                    <div className="text-[10px] sm:text-[11px] text-[#17c666] font-semibold flex items-center gap-1 truncate">
+                      <span className="w-2 h-2 rounded-full bg-[#17c666] shrink-0" />
+                      Online • 8 Tools + Busca Híbrida RAG
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="flex-1 p-5 overflow-y-auto space-y-4 min-h-[420px] max-h-[60vh]">
+              <div className="flex-1 p-3.5 sm:p-5 overflow-y-auto space-y-4 min-h-[50vh] max-h-[64vh]">
                 {messages.map((m) => (
                   <div
                     key={m.id}
@@ -1342,7 +1559,7 @@ export default function App() {
                     }`}
                   >
                     <div
-                      className={`max-w-3xl rounded-2xl px-4 py-3.5 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
+                      className={`max-w-[92%] sm:max-w-3xl rounded-2xl px-3.5 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words ${
                         m.role === "user"
                           ? "bg-[#3454d1] text-white shadow-sm"
                           : darkMode
@@ -1356,18 +1573,18 @@ export default function App() {
                       {m.tools && m.tools.length > 0 && (
                         <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-slate-800 space-y-1.5">
                           <div className="text-[11px] font-bold text-[#3454d1] flex items-center gap-1">
-                            <Wrench className="w-3.5 h-3.5" />
+                            <Wrench className="w-3.5 h-3.5 shrink-0" />
                             Tools Acionadas pelo Gemini:
                           </div>
                           {m.tools.map((t, idx) => (
                             <div
                               key={idx}
-                              className="text-xs bg-[#3454d1]/10 border border-[#3454d1]/20 rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2"
+                              className="text-xs bg-[#3454d1]/10 border border-[#3454d1]/20 rounded-lg px-2.5 py-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2"
                             >
                               <span className="font-mono font-bold text-[11px] text-[#3454d1]">
                                 {t.name}()
                               </span>
-                              <span className="font-medium">{t.result_summary}</span>
+                              <span className="font-medium break-words">{t.result_summary}</span>
                             </div>
                           ))}
                         </div>
@@ -1383,7 +1600,7 @@ export default function App() {
                             {m.ragSources.map((s, idx) => (
                               <span
                                 key={idx}
-                                className="text-[11px] bg-[#17c666]/10 border border-[#17c666]/30 text-[#17c666] px-2 py-0.5 rounded-md font-semibold"
+                                className="text-[11px] bg-[#17c666]/10 border border-[#17c666]/30 text-[#17c666] px-2 py-0.5 rounded-md font-semibold break-all"
                               >
                                 {s.filename} (Chunk #{s.chunk_index + 1} • {s.score})
                               </span>
@@ -1413,7 +1630,7 @@ export default function App() {
                   e.preventDefault();
                   handleSendMessage();
                 }}
-                className={`p-4 border-t flex gap-2.5 ${
+                className={`p-3 sm:p-4 border-t flex gap-2 ${
                   darkMode ? "border-slate-800 bg-slate-900/40" : "border-slate-100 bg-slate-50/60"
                 }`}
               >
@@ -1421,16 +1638,16 @@ export default function App() {
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Converse com seu agente (ex: 'Gastei 120 na farmácia', 'Qual meu saldo?', 'O que diz o PDF enviado?')..."
-                  className={`flex-1 rounded-xl px-4 py-2.5 text-sm border focus:outline-none focus:border-[#3454d1] ${inputSurface}`}
+                  placeholder="Digite sua pergunta ou comando..."
+                  className={`flex-1 min-w-0 rounded-xl px-3.5 py-2.5 text-sm border focus:outline-none focus:border-[#3454d1] ${inputSurface}`}
                 />
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-[#3454d1] hover:bg-[#2945b8] disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-2 transition-colors shadow-sm"
+                  className="bg-[#3454d1] hover:bg-[#2945b8] disabled:opacity-50 text-white px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm shrink-0"
                 >
                   <Send className="w-4 h-4" />
-                  Enviar
+                  <span className="hidden sm:inline">Enviar</span>
                 </button>
               </form>
             </div>
@@ -1439,7 +1656,7 @@ export default function App() {
 
         {/* TOAST FLUTUANTE DE NOTIFICAÇÃO DISPARADA */}
         {activeToastAlert && (
-          <div className="fixed top-20 right-6 z-50 max-w-sm w-full bg-[#283c50] text-white rounded-xl shadow-2xl border border-[#3454d1] p-4 flex items-start justify-between gap-3 animate-bounce">
+          <div className="fixed top-16 sm:top-20 inset-x-3 sm:left-auto sm:right-6 z-50 sm:max-w-sm bg-[#283c50] text-white rounded-xl shadow-2xl border border-[#3454d1] p-4 flex items-start justify-between gap-3 animate-bounce">
             <div className="space-y-1">
               <div className="text-xs font-extrabold text-[#3dc7be] flex items-center gap-1.5">
                 <Bell className="w-3.5 h-3.5" />
@@ -1483,33 +1700,33 @@ export default function App() {
           <div className="p-4 md:p-6 max-w-[1440px] w-full mx-auto space-y-6">
             {/* Duralux Sub-Navigation Bar: Contas Atuais vs Gastos Anteriores (Faturas na Memória) */}
             <div
-              className={`duralux-card rounded-xl border p-2 flex flex-wrap items-center justify-between gap-2 ${cardSurface}`}
+              className={`duralux-card rounded-xl border p-2 flex flex-col sm:flex-row sm:items-center justify-between gap-2 ${cardSurface}`}
             >
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="grid grid-cols-1 sm:flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto">
                 <button
                   onClick={() => setFinanceSubTab("current")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+                  className={`w-full sm:w-auto px-3.5 py-2.5 sm:py-2 rounded-lg text-xs font-bold flex items-center justify-center sm:justify-start gap-2 transition-all ${
                     financeSubTab === "current"
                       ? "bg-[#3454d1] text-white shadow-sm"
                       : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <Wallet className="w-4 h-4" />
-                  Saldos, Cartões & Contas Atuais
+                  <Wallet className="w-4 h-4 shrink-0" />
+                  <span>Saldos, Cartões & Contas Atuais</span>
                 </button>
 
                 <button
                   onClick={() => setFinanceSubTab("statement_history")}
-                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+                  className={`w-full sm:w-auto px-3.5 py-2.5 sm:py-2 rounded-lg text-xs font-bold flex items-center justify-center sm:justify-start gap-2 transition-all ${
                     financeSubTab === "statement_history"
                       ? "bg-[#3454d1] text-white shadow-sm"
                       : "text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
                   }`}
                 >
-                  <FileText className="w-4 h-4" />
-                  Gastos Anteriores (Faturas na Memória & RAG)
+                  <FileText className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Gastos Anteriores (Faturas)</span>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${
                       financeSubTab === "statement_history"
                         ? "bg-white/20 text-white"
                         : "bg-[#3454d1]/10 text-[#3454d1]"
@@ -1684,24 +1901,24 @@ export default function App() {
           <div className="p-4 md:p-6 max-w-[1440px] w-full mx-auto space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Coluna 1: Core Memory CRUD */}
-              <div className={`duralux-card rounded-xl border p-6 space-y-4 ${cardSurface}`}>
+              <div className={`duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}>
                 <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-[15px] flex items-center gap-2">
-                    <Brain className="w-4 h-4 text-[#3454d1]" />
+                  <h3 className="font-bold text-sm sm:text-[15px] flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-[#3454d1] shrink-0" />
                     Memória Core do Agente ({memories.length} fatos)
                   </h3>
                 </div>
 
                 <form
                   onSubmit={handleSaveMemory}
-                  className={`rounded-xl border p-4 space-y-3 ${subtleSurface}`}
+                  className={`rounded-xl border p-3.5 sm:p-4 space-y-3 ${subtleSurface}`}
                 >
                   <div className="text-xs font-bold text-[#3454d1]">
                     {editingMemory
                       ? `✏️ Editando Memória #${editingMemory.id}`
                       : "➕ Novo Fato para a Memória Core"}
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <select
                       value={
                         editingMemory ? editingMemory.category : newMemCategory
@@ -1714,7 +1931,7 @@ export default function App() {
                             })
                           : setNewMemCategory(e.target.value)
                       }
-                      className={`rounded-lg px-2.5 py-1.5 text-xs border ${inputSurface}`}
+                      className={`rounded-lg px-2.5 py-2 sm:py-1.5 text-xs border ${inputSurface}`}
                     >
                       <option value="pessoal">Pessoal</option>
                       <option value="financas">Finanças</option>
@@ -1734,7 +1951,7 @@ export default function App() {
                             })
                           : setNewMemKey(e.target.value)
                       }
-                      className={`col-span-2 rounded-lg px-3 py-1.5 text-xs border ${inputSurface}`}
+                      className={`sm:col-span-2 rounded-lg px-3 py-2 sm:py-1.5 text-xs border ${inputSurface}`}
                     />
                   </div>
                   <textarea
@@ -1753,7 +1970,7 @@ export default function App() {
                     }
                     className={`w-full rounded-lg p-2.5 text-xs border ${inputSurface}`}
                   />
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <label className="text-xs text-slate-400 font-medium flex items-center gap-2">
                       Importância (1-5):
                       <input
@@ -1776,7 +1993,7 @@ export default function App() {
                         className={`w-14 rounded-lg px-2 py-1 text-xs border ${inputSurface}`}
                       />
                     </label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 w-full sm:w-auto justify-end">
                       {editingMemory && (
                         <button
                           type="button"
@@ -1788,7 +2005,7 @@ export default function App() {
                       )}
                       <button
                         type="submit"
-                        className="text-xs px-4 py-1.5 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white font-bold"
+                        className="w-full sm:w-auto text-xs px-4 py-2 sm:py-1.5 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white font-bold"
                       >
                         {editingMemory ? "Atualizar" : "Salvar na Memória"}
                       </button>
@@ -1802,14 +2019,14 @@ export default function App() {
                       key={m.id}
                       className={`rounded-xl border p-3.5 space-y-1.5 ${subtleSurface}`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
                           <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#3454d1]/10 text-[#3454d1]">
                             {m.category}
                           </span>
-                          <span className="font-bold text-sm">{m.key}</span>
+                          <span className="font-bold text-xs sm:text-sm break-words">{m.key}</span>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <span className="text-[11px] font-bold text-[#ffa21d]">
                             ★ {m.importance}/5
                           </span>
@@ -1830,7 +2047,7 @@ export default function App() {
                           </button>
                         </div>
                       </div>
-                      <p className="text-xs text-slate-500 dark:text-slate-300 leading-relaxed">
+                      <p className="text-xs text-slate-500 dark:text-slate-300 leading-relaxed break-words">
                         {m.content}
                       </p>
                     </div>
@@ -1839,13 +2056,13 @@ export default function App() {
               </div>
 
               {/* Coluna 2: Upload RAG & Editor de Chunks */}
-              <div className={`duralux-card rounded-xl border p-6 space-y-4 ${cardSurface}`}>
-                <div className="flex items-center justify-between">
-                  <h3 className="font-bold text-[15px] flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#17c666]" />
+              <div className={`duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-bold text-sm sm:text-[15px] flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-[#17c666] shrink-0" />
                     Arquivos Enviados ao RAG ({documents.length})
                   </h3>
-                  <span className="text-xs font-bold text-slate-400">
+                  <span className="text-xs font-bold text-slate-400 shrink-0">
                     Total:{" "}
                     {formatBytes(
                       documents.reduce((acc, d) => acc + d.size_bytes, 0)
@@ -1854,7 +2071,7 @@ export default function App() {
                 </div>
 
                 <div
-                  className={`rounded-xl border border-dashed p-4 flex flex-col sm:flex-row items-center justify-between gap-3 ${subtleSurface}`}
+                  className={`rounded-xl border border-dashed p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${subtleSurface}`}
                 >
                   <div>
                     <div className="text-xs font-bold">
@@ -1864,17 +2081,17 @@ export default function App() {
                       Extrai texto, divide em chunks e gera embeddings automaticamente
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 w-full sm:w-auto">
                     <select
                       value={uploadCategory}
                       onChange={(e) => setUploadCategory(e.target.value)}
-                      className={`rounded-lg px-2.5 py-1.5 text-xs border ${inputSurface}`}
+                      className={`flex-1 sm:flex-initial rounded-lg px-2.5 py-2 sm:py-1.5 text-xs border ${inputSurface}`}
                     >
                       <option value="geral">Geral</option>
                       <option value="financas">Finanças / Fatura</option>
                       <option value="faculdade">Faculdade</option>
                     </select>
-                    <label className="cursor-pointer bg-[#17c666] hover:brightness-95 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5">
+                    <label className="cursor-pointer bg-[#17c666] hover:brightness-95 text-white px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shrink-0">
                       <Upload className="w-3.5 h-3.5" />
                       {uploadingFile ? "Indexando..." : "Enviar Arquivo"}
                       <input
@@ -1898,24 +2115,24 @@ export default function App() {
                         key={doc.id}
                         className={`rounded-xl border p-3.5 space-y-2 ${subtleSurface}`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="font-bold text-sm flex items-center gap-2">
-                              {doc.filename}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                          <div className="min-w-0">
+                            <div className="font-bold text-xs sm:text-sm flex flex-wrap items-center gap-1.5 break-all">
+                              <span>{doc.filename}</span>
                               <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-[#3454d1]/10 text-[#3454d1]">
                                 {doc.category}
                               </span>
                             </div>
-                            <div className="text-xs text-slate-400">
+                            <div className="text-xs text-slate-400 mt-0.5">
                               {formatBytes(doc.size_bytes)} • {doc.chunk_count}{" "}
                               chunks vetorizados
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center justify-end gap-2 shrink-0">
                             <button
                               onClick={() => handleInspectChunks(doc.id)}
-                              className="text-xs px-2.5 py-1 rounded-lg bg-[#3454d1]/10 text-[#3454d1] font-bold"
+                              className="text-xs px-2.5 py-1.5 sm:py-1 rounded-lg bg-[#3454d1]/10 text-[#3454d1] font-bold"
                             >
                               {selectedDocId === doc.id
                                 ? "Ocultar Chunks"
@@ -1928,7 +2145,7 @@ export default function App() {
                                   setSelectedDocId(null);
                                 refreshAll();
                               }}
-                              className="text-slate-400 hover:text-[#ea4d4d]"
+                              className="text-slate-400 hover:text-[#ea4d4d] p-1"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -2127,18 +2344,18 @@ export default function App() {
 
       {/* Bottom Nav Mobile (PWA) */}
       <nav
-        className={`md:hidden fixed bottom-0 inset-x-0 border-t flex justify-around py-2 z-30 ${
+        className={`md:hidden fixed bottom-0 inset-x-0 border-t grid grid-cols-6 pt-1.5 pb-safe z-30 ${
           darkMode
-            ? "bg-[#182235] border-slate-800"
-            : "bg-white border-slate-200"
-        }`}
+            ? "bg-[#182235]/95 border-slate-800"
+            : "bg-white/95 border-slate-200"
+        } backdrop-blur`}
       >
         {[
           { id: "overview", label: "Home", icon: LayoutDashboard },
           { id: "chat", label: "Agente", icon: MessageSquare },
           { id: "agenda", label: "Agenda", icon: Calendar },
           { id: "finances", label: "Finanças", icon: Wallet },
-          { id: "academic", label: "Faculdade", icon: GraduationCap },
+          { id: "academic", label: "Estudos", icon: GraduationCap },
           { id: "memory", label: "Memória", icon: Database },
         ].map((item) => {
           const Icon = item.icon;
@@ -2147,12 +2364,12 @@ export default function App() {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id as ActiveTab)}
-              className={`flex flex-col items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold ${
+              className={`flex flex-col items-center justify-center gap-1 py-1.5 text-[10px] font-bold transition-colors ${
                 active ? "text-[#3454d1]" : "text-slate-400"
               }`}
             >
-              <Icon className="w-4 h-4" />
-              {item.label}
+              <Icon className={`w-4 h-4 ${active ? "stroke-[2.5]" : ""}`} />
+              <span className="truncate max-w-full px-0.5">{item.label}</span>
             </button>
           );
         })}

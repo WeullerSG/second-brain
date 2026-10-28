@@ -144,22 +144,22 @@ export const AgendaNotificationsView: React.FC<
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+        <div className="grid grid-cols-1 sm:flex sm:flex-wrap items-center gap-2 w-full lg:w-auto shrink-0">
           {permissionStatus !== "granted" && (
             <button
               onClick={onRequestPermission}
-              className="px-4 py-2 rounded-lg bg-[#17c666] hover:brightness-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              className="w-full sm:w-auto justify-center px-4 py-2.5 sm:py-2 rounded-lg bg-[#17c666] hover:brightness-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
             >
-              <Bell className="w-3.5 h-3.5" />
+              <Bell className="w-3.5 h-3.5 shrink-0" />
               Permitir Notificações no Dispositivo
             </button>
           )}
 
           <button
             onClick={() => onTriggerTestNotification()}
-            className="px-4 py-2 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
+            className="w-full sm:w-auto justify-center px-4 py-2.5 sm:py-2 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
           >
-            <Volume2 className="w-3.5 h-3.5" />
+            <Volume2 className="w-3.5 h-3.5 shrink-0" />
             Testar Disparo de Notificação Agora
           </button>
         </div>
@@ -248,7 +248,7 @@ export const AgendaNotificationsView: React.FC<
             return (
               <div
                 key={day.code}
-                className={`rounded-xl border p-3.5 flex flex-col justify-between min-h-[160px] ${subtleSurface}`}
+                className={`rounded-xl border p-3.5 flex flex-col justify-between sm:min-h-[160px] ${subtleSurface}`}
               >
                 <div>
                   <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-200 dark:border-slate-800">
@@ -261,7 +261,7 @@ export const AgendaNotificationsView: React.FC<
                   </div>
 
                   {dayClasses.length === 0 ? (
-                    <div className="text-[11px] text-slate-400 py-6 text-center">
+                    <div className="text-[11px] text-slate-400 py-2 sm:py-6 text-center">
                       Sem aula configurada
                     </div>
                   ) : (
@@ -307,7 +307,7 @@ export const AgendaNotificationsView: React.FC<
           </h3>
 
           <form onSubmit={handleCreateSchedule} className="space-y-3.5 text-xs">
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 mb-1">
                   Categoria
@@ -402,7 +402,7 @@ export const AgendaNotificationsView: React.FC<
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block text-[11px] font-bold text-slate-400 mb-1">
                   Horário (HH:MM)

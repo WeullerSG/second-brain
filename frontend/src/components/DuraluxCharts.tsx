@@ -47,12 +47,12 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
     >
       {/* Header do Card Duralux */}
       <div
-        className={`px-6 py-4 border-b flex flex-wrap items-center justify-between gap-2 ${
+        className={`px-4 sm:px-6 py-4 border-b flex flex-wrap items-center justify-between gap-2 ${
           darkMode ? "border-slate-800" : "border-slate-100"
         }`}
       >
         <div>
-          <h3 className="font-bold text-[15px] tracking-tight">
+          <h3 className="font-bold text-sm sm:text-[15px] tracking-tight">
             Fluxo Financeiro & Atividade do Agente
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
@@ -60,7 +60,7 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-4 text-xs font-medium">
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-[11px] sm:text-xs font-medium">
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#3454d1]" />
             Receitas
@@ -77,8 +77,8 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
       </div>
 
       {/* Área do Gráfico Combinado (Barras + Linha Suave estilo ApexCharts do Duralux) */}
-      <div className="px-6 pt-6 pb-4">
-        <div className="relative h-56 flex items-end justify-between gap-3 sm:gap-6 pt-6 border-b border-dashed border-slate-200 dark:border-slate-800">
+      <div className="px-4 sm:px-6 pt-6 pb-4">
+        <div className="relative h-56 flex items-end justify-between gap-2 sm:gap-6 pt-6 pl-10 sm:pl-12 border-b border-dashed border-slate-200 dark:border-slate-800">
           {/* Linhas horizontais de grade */}
           <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
             {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
