@@ -136,8 +136,8 @@ AGENT_TOOLS: list[dict[str, Any]] = [
         "type": "function",
         "name": "add_installment_purchase",
         "description": (
-            "Registra uma compra parcelada no cartão de crédito e cria automaticamente as parcelas "
-            "para os próximos meses."
+            "Registra uma compra parcelada no cartão de crédito ou um financiamento (carro, imóvel, "
+            "empréstimo) e cria automaticamente as parcelas para os próximos meses. Sem limite de parcelas."
         ),
         "parameters": {
             "type": "object",
@@ -146,7 +146,12 @@ AGENT_TOOLS: list[dict[str, Any]] = [
                 "installment_amount": {"type": "number", "description": "Valor de cada parcela em R$"},
                 "current_installment": {"type": "integer", "description": "Número da parcela atual (ex: 1)"},
                 "total_installments": {"type": "integer", "description": "Total de parcelas (ex: 6)"},
-                "account_name": {"type": "string", "description": "Nome do cartão (ex: 'Cartão Mercado Pago Visa')"},
+                "account_name": {"type": "string", "description": "Nome do cartão ou do banco/financeira (ex: 'Cartão Mercado Pago Visa', 'Banco do Brasil')"},
+                "kind": {
+                    "type": "string",
+                    "enum": ["parcelado", "financiamento"],
+                    "description": "'parcelado' para compra no cartão; 'financiamento' para financiamento/empréstimo",
+                },
                 "first_due_date": {"type": "string", "description": "Data de vencimento no formato YYYY-MM-DD"},
             },
             "required": ["title", "installment_amount", "total_installments"],
@@ -520,14 +525,14 @@ def execute_tool_call(
             current_installment=int(args.get("current_installment", 1)),
             total_installments=int(args.get("total_installments", 2)),
             account_name=args.get("account_name", "Cartão Mercado Pago Visa"),
-            category="parcelado",
+            category="financiamento" if args.get("kind") == "financiamento" else "parcelado",
             first_due_date=args.get("first_due_date"),
             current_month_paid=False,
         )
         res = create_installment_purchase(payload=payload, db=db)
         return (
             res,
-            f"Parcelamento registrado: {res['title']} ({res['total_installments']}x de R$ {res['installment_amount']:.2f})",
+            f"{'Financiamento' if res['category'] == 'financiamento' else 'Parcelamento'} registrado: {res['title']} ({res['total_installments']}x de R$ {res['installment_amount']:.2f})",
         )
 
     if name == "add_academic_task":

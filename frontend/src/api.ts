@@ -113,6 +113,7 @@ export const api = {
       title: string;
       installment_amount: number;
       total_installments: number;
+      category: string;
     }>("/finances/installments", {
       method: "POST",
       body: JSON.stringify(data),

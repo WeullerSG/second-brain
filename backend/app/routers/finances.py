@@ -1207,9 +1207,10 @@ def get_finance_summary(db: Session = Depends(get_db)):
     installment_records = [
         r
         for r in records
-        if r.category == "parcelado"
+        if r.category in ("parcelado", "financiamento")
         or "parcela" in (r.title or "").lower()
         or "[parcelado" in (r.notes or "").lower()
+        or "[financiamento" in (r.notes or "").lower()
     ]
 
     grouped_installments: dict[str, dict[str, Any]] = {}
@@ -1225,7 +1226,7 @@ def get_finance_summary(db: Session = Depends(get_db)):
                 "id": r.id,
                 "title": base_name,
                 "account_name": r.account_name,
-                "category": "parcelado",
+                "category": "financiamento" if r.category == "financiamento" else "parcelado",
                 "installment_amount": round(r.amount, 2),
                 "paid_installments": paid_installments,
                 "total_installments": tot_n,
@@ -1291,7 +1292,8 @@ def get_finance_summary(db: Session = Depends(get_db)):
     baseline_recurring_records = [
         r
         for r in months_map.get(next_month_key, [])
-        if r.record_type == "expense" or "[recorrente" in (r.notes or "").lower() or "[conta fixa" in (r.notes or "").lower()
+        if r.category != "financiamento"  # já somado em parcelas
+        and (r.record_type == "expense" or "[recorrente" in (r.notes or "").lower() or "[conta fixa" in (r.notes or "").lower())
     ]
     baseline_recurring_sum = round(sum(r.amount for r in baseline_recurring_records), 2)
 
@@ -1302,7 +1304,7 @@ def get_finance_summary(db: Session = Depends(get_db)):
             sum(
                 r.amount
                 for r in m_recs
-                if r.category == "parcelado"
+                if r.category in ("parcelado", "financiamento")
                 or "parcela" in (r.title or "").lower()
                 or "[parcelado" in (r.notes or "").lower()
             ),
@@ -1323,7 +1325,8 @@ def get_finance_summary(db: Session = Depends(get_db)):
             sum(
                 r.amount
                 for r in m_recs
-                if r.record_type == "expense" or "[recorrente" in (r.notes or "").lower()
+                if r.category != "financiamento"  # já somado em parcelas
+                and (r.record_type == "expense" or "[recorrente" in (r.notes or "").lower())
             ),
             2,
         )
@@ -1445,6 +1448,12 @@ def create_installment_purchase(payload: InstallmentCreate, db: Session = Depend
     amt = round(payload.installment_amount, 2)
     total_purchase = round(amt * tot_n, 2)
     clean_title = payload.title.strip()
+    # Financiamento: débito mensal na conta (não entra na fatura do cartão)
+    is_financing = (payload.category or "").lower() == "financiamento"
+    category = "financiamento" if is_financing else (payload.category or "parcelado")
+    record_type = "expense" if is_financing else "card_bill"
+    tag = "FINANCIAMENTO" if is_financing else "PARCELADO"
+    kind_label = "Financiamento" if is_financing else "Compra"
 
     created_items = []
     # Se a parcela atual ainda não foi paga (ou o usuário quer registrar a partir da atual)
@@ -1454,14 +1463,14 @@ def create_installment_purchase(payload: InstallmentCreate, db: Session = Depend
         due_dt = _add_months(base_date, step)
         rec = FinanceRecord(
             title=f"{clean_title} (Parcela {inst_num} de {tot_n})",
-            category=payload.category or "parcelado",
-            record_type="card_bill",
+            category=category,
+            record_type=record_type,
             amount=amt,
             account_name=payload.account_name,
             due_date=due_dt,
             status="pending",
             notes=(
-                f"[PARCELADO {inst_num}/{tot_n}] Compra em {tot_n}x de R$ {amt:.2f} "
+                f"[{tag} {inst_num}/{tot_n}] {kind_label} em {tot_n}x de R$ {amt:.2f} "
                 f"(Total R$ {total_purchase:.2f})"
                 + (f" • {payload.notes}" if payload.notes else "")
             ),
@@ -1476,6 +1485,7 @@ def create_installment_purchase(payload: InstallmentCreate, db: Session = Depend
         "title": clean_title,
         "installment_amount": amt,
         "total_installments": tot_n,
+        "category": category,
     }
 
 

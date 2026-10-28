@@ -51,6 +51,8 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
   const [instCardName, setInstCardName] = useState("Cartão Mercado Pago Visa");
   const [instDueDate, setInstDueDate] = useState("2026-11-14");
   const [instCurrentPaid, setInstCurrentPaid] = useState(false);
+  const [instKind, setInstKind] = useState<"parcelado" | "financiamento">("parcelado");
+  const isFinancing = instKind === "financiamento";
 
   // Estado para cadastrar Conta / Cartão
   const [showAccountForm, setShowAccountForm] = useState(false);
@@ -202,7 +204,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
       current_installment: curr,
       total_installments: tot,
       account_name: instCardName,
-      category: "parcelado",
+      category: instKind,
       first_due_date: instDueDate || undefined,
       current_month_paid: instCurrentPaid,
     });
@@ -210,7 +212,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
     setInstAmount("");
     setShowInstallmentModal(false);
     setFeedbackBanner(
-      `✅ Compra parcelada "${res.title}" (${tot}x de R$ ${formatBRL(amt)}) anotada! ${res.created_installments_count} parcelas foram registradas nos próximos meses.`
+      `✅ ${isFinancing ? "Financiamento" : "Compra parcelada"} "${res.title}" (${tot}x de R$ ${formatBRL(amt)}) anotada! ${res.created_installments_count} parcelas foram registradas nos próximos meses.`
     );
     await onRefresh();
   };
@@ -298,10 +300,12 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             <div>
               <h4 className="font-bold text-sm text-[#3454d1] flex items-center gap-2">
                 <Layers className="w-4 h-4" />
-                Anotar Compra Parcelada (Registra Automaticamente nos Próximos Meses)
+                {isFinancing ? "Anotar Financiamento" : "Anotar Compra Parcelada"} (Registra Automaticamente nos Próximos Meses)
               </h4>
               <p className="text-xs text-slate-400">
-                Informe a parcela atual e o total de parcelas para deixar registrado tudo o que vai vir nas próximas faturas
+                {isFinancing
+                  ? "Informe a parcela atual e o total de parcelas (sem limite, ex: 120x, 360x) para registrar as prestações mensais"
+                  : "Informe a parcela atual e o total de parcelas para deixar registrado tudo o que vai vir nas próximas faturas"}
               </p>
             </div>
             <button
@@ -313,15 +317,38 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             </button>
           </div>
 
+          <div className="inline-flex rounded-lg border border-slate-300 dark:border-slate-700 p-0.5 text-xs font-bold">
+            {(
+              [
+                ["parcelado", "Parcelado no Cartão"],
+                ["financiamento", "Financiamento"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setInstKind(value);
+                  setInstCardName(value === "financiamento" ? "" : "Cartão Mercado Pago Visa");
+                }}
+                className={`px-3 py-1.5 rounded-md transition-colors ${
+                  instKind === value ? "bg-[#3454d1] text-white" : "text-slate-400 hover:text-[#3454d1]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
             <div className=" lg:col-span-2">
               <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                Estabelecimento / Compra
+                {isFinancing ? "O que foi financiado" : "Estabelecimento / Compra"}
               </label>
               <input
                 type="text"
                 required
-                placeholder="Ex: Amazon BR, Mercado Livre, Notebook"
+                placeholder={isFinancing ? "Ex: Carro, Apartamento, Empréstimo" : "Ex: Amazon BR, Mercado Livre, Notebook"}
                 value={instTitle}
                 onChange={(e) => setInstTitle(e.target.value)}
                 className={`w-full rounded-lg px-3 py-2 text-xs border ${inputSurface}`}
@@ -372,10 +399,12 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
 
             <div>
               <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                Cartão de Crédito
+                {isFinancing ? "Banco / Financeira" : "Cartão de Crédito"}
               </label>
               <input
                 type="text"
+                required
+                placeholder={isFinancing ? "Ex: Caixa, Banco do Brasil" : undefined}
                 value={instCardName}
                 onChange={(e) => setInstCardName(e.target.value)}
                 className={`w-full rounded-lg px-3 py-2 text-xs border ${inputSurface}`}
@@ -404,7 +433,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                 className="rounded text-[#3454d1]"
               />
               <span>
-                A parcela atual ({instCurrent}/{instTotal}) já veio na fatura paga deste mês (gerar a partir da parcela{" "}
+                A parcela atual ({instCurrent}/{instTotal}) já foi paga neste mês (gerar a partir da parcela{" "}
                 {Math.min(Number(instTotal), Number(instCurrent) + 1)}/{instTotal})
               </span>
             </label>
@@ -413,7 +442,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               type="submit"
               className="px-5 py-2 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white text-xs font-bold shadow-sm"
             >
-              Salvar Parcelamento & Agendar Próximos Meses
+              {isFinancing ? "Salvar Financiamento" : "Salvar Parcelamento"} & Agendar Próximos Meses
             </button>
           </div>
         </form>
@@ -1061,6 +1090,11 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                           <span className="font-extrabold text-sm">
                             {inst.title}
                           </span>
+                          {inst.category === "financiamento" && (
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-[#ffa21d]/15 text-[#ffa21d]">
+                              Financiamento
+                            </span>
+                          )}
                           <span className="text-[10px] font-extrabold px-2 py-0.5 rounded bg-[#3454d1]/15 text-[#3454d1]">
                             {inst.total_installments}x de R${" "}
                             {formatBRL(inst.installment_amount)}
