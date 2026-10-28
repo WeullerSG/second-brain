@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --duralux-primary: #3454d1;
+    --duralux-primary-hover: #2945b8;
+    --duralux-success: #17c666;
+    --duralux-warning: #ffa21d;
+    --duralux-danger: #ea4d4d;
+    --duralux-info: #3dc7be;
+    --duralux-dark: #283c50;
+  }
+
+  body {
+    font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+}
+
+/* Duralux card elevation */
+.duralux-card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.duralux-card:hover {
+  box-shadow: 0 8px 24px rgba(40, 60, 80, 0.07);
+}
+
+/* Custom sleek scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(52, 84, 209, 0.7);
+}

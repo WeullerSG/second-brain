@@ -1,0 +1,305 @@
+import React from "react";
+import type { FinanceSummary, TelemetryOverview } from "../types";
+
+interface PaymentChartProps {
+  finance: FinanceSummary | null;
+  telemetry: TelemetryOverview | null;
+  darkMode: boolean;
+}
+
+export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
+  finance,
+  telemetry,
+  darkMode,
+}) => {
+  // Dados mensais simulados + mês atual real para o gráfico estilo Duralux "Payment Record"
+  const currentIncome = finance?.total_income || 3800;
+  const currentExpenses =
+    (finance?.pending_bills || 0) + (finance?.paid_expenses || 0) || 1210;
+
+  const months = [
+    { label: "MAI", income: 3400, expense: 1950, tokens: 12 },
+    { label: "JUN", income: 3600, expense: 2100, tokens: 19 },
+    { label: "JUL", income: 3500, expense: 1680, tokens: 24 },
+    { label: "AGO", income: 3800, expense: 2250, tokens: 31 },
+    { label: "SET", income: 3950, expense: 1840, tokens: 28 },
+    {
+      label: "OUT",
+      income: Math.max(currentIncome, 500),
+      expense: Math.max(currentExpenses, 300),
+      tokens: Math.min(100, Math.max(15, Math.round((telemetry?.usage_stats.total_tokens || 4500) / 200))),
+    },
+  ];
+
+  const maxVal = Math.max(...months.map((m) => Math.max(m.income, m.expense)), 4500);
+
+  const totalBalance = finance?.total_balance ?? 0;
+  const pendingBills = finance?.pending_bills ?? 0;
+  const totalTokens = telemetry?.usage_stats.total_tokens ?? 0;
+
+  return (
+    <div
+      className={`duralux-card rounded-xl border flex flex-col justify-between ${
+        darkMode
+          ? "bg-[#182235] border-slate-800 text-slate-100"
+          : "bg-white border-slate-200/90 text-[#283c50]"
+      }`}
+    >
+      {/* Header do Card Duralux */}
+      <div
+        className={`px-6 py-4 border-b flex flex-wrap items-center justify-between gap-2 ${
+          darkMode ? "border-slate-800" : "border-slate-100"
+        }`}
+      >
+        <div>
+          <h3 className="font-bold text-[15px] tracking-tight">
+            Fluxo Financeiro & Atividade do Agente
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Comparativo mensal de Receitas, Contas de Cartão e Interações IA
+          </p>
+        </div>
+
+        <div className="flex items-center gap-4 text-xs font-medium">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#3454d1]" />
+            Receitas
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#ea4d4d]" />
+            Contas & Cartão
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#17c666]" />
+            Índice IA
+          </span>
+        </div>
+      </div>
+
+      {/* Área do Gráfico Combinado (Barras + Linha Suave estilo ApexCharts do Duralux) */}
+      <div className="px-6 pt-6 pb-4">
+        <div className="relative h-56 flex items-end justify-between gap-3 sm:gap-6 pt-6 border-b border-dashed border-slate-200 dark:border-slate-800">
+          {/* Linhas horizontais de grade */}
+          <div className="absolute inset-0 flex flex-col justify-between pointer-events-none">
+            {[1, 0.75, 0.5, 0.25, 0].map((ratio, idx) => (
+              <div
+                key={idx}
+                className={`w-full border-b border-dashed flex items-center ${
+                  darkMode ? "border-slate-800/80" : "border-slate-100"
+                }`}
+              >
+                <span className="text-[10px] text-slate-400 -mt-4">
+                  R$ {Math.round(maxVal * ratio)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {months.map((m) => {
+            const incHeight = Math.max(8, Math.round((m.income / maxVal) * 170));
+            const expHeight = Math.max(8, Math.round((m.expense / maxVal) * 170));
+            return (
+              <div
+                key={m.label}
+                className="relative z-10 flex-1 flex flex-col items-center group"
+              >
+                {/* Tooltip no hover */}
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity absolute -top-9 bg-[#283c50] text-white text-[10px] px-2 py-1 rounded shadow-md whitespace-nowrap pointer-events-none">
+                  +R$ {m.income.toFixed(0)} / -R$ {m.expense.toFixed(0)}
+                </div>
+
+                <div className="flex items-end gap-1.5 sm:gap-2 h-[175px]">
+                  <div
+                    style={{ height: `${incHeight}px` }}
+                    className="w-3 sm:w-4 rounded-t-md bg-[#3454d1] transition-all duration-300 group-hover:brightness-110"
+                  />
+                  <div
+                    style={{ height: `${expHeight}px` }}
+                    className="w-3 sm:w-4 rounded-t-md bg-[#ea4d4d]/85 transition-all duration-300 group-hover:brightness-110"
+                  />
+                </div>
+                <span className="text-[11px] font-semibold text-slate-400 mt-2.5">
+                  {m.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Rodapé de 4 Colunas Bordeado — Assinatura Visual Clássica do Duralux */}
+      <div
+        className={`grid grid-cols-2 lg:grid-cols-4 border-t ${
+          darkMode ? "border-slate-800 divide-slate-800" : "border-slate-100 divide-slate-100"
+        } divide-x divide-y lg:divide-y-0`}
+      >
+        <div className="p-4">
+          <div className="text-xs text-slate-400 font-medium">Saldo em Contas</div>
+          <div className="text-base font-bold mt-1">
+            R$ {totalBalance.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+          </div>
+          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
+            <div className="h-full bg-[#3454d1] rounded-full" style={{ width: "78%" }} />
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="text-xs text-slate-400 font-medium">Faturas Aguardando</div>
+          <div className="text-base font-bold mt-1">
+            R$ {pendingBills.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+          </div>
+          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
+            <div className="h-full bg-[#ffa21d] rounded-full" style={{ width: "54%" }} />
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="text-xs text-slate-400 font-medium">Despesas Quitadas</div>
+          <div className="text-base font-bold mt-1">
+            R${" "}
+            {(finance?.paid_expenses ?? 0).toLocaleString("pt-BR", {
+              minimumFractionDigits: 2,
+            })}
+          </div>
+          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
+            <div className="h-full bg-[#17c666] rounded-full" style={{ width: "68%" }} />
+          </div>
+        </div>
+
+        <div className="p-4">
+          <div className="text-xs text-slate-400 font-medium">Tokens IA Utilizados</div>
+          <div className="text-base font-bold mt-1">
+            {totalTokens.toLocaleString("pt-BR")}
+          </div>
+          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
+            <div className="h-full bg-[#3dc7be] rounded-full" style={{ width: "62%" }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+interface MemoryDonutProps {
+  telemetry: TelemetryOverview | null;
+  darkMode: boolean;
+}
+
+export const MemoryDonutChart: React.FC<MemoryDonutProps> = ({
+  telemetry,
+  darkMode,
+}) => {
+  const facts = telemetry?.memory_stats.total_memory_facts ?? 3;
+  const chunks = telemetry?.memory_stats.total_rag_chunks ?? 0;
+  const finRecs = telemetry?.memory_stats.structured_records.finance_records ?? 3;
+  const acadTasks = telemetry?.memory_stats.structured_records.academic_tasks ?? 2;
+  const ftCount = telemetry?.memory_stats.structured_records.finetune_examples ?? 1;
+
+  const totalItems = Math.max(1, facts + chunks + finRecs + acadTasks + ftCount);
+
+  const items = [
+    { label: "Core Memory (Fatos)", count: facts, color: "#3454d1" },
+    { label: "Chunks RAG Vetorizados", count: chunks, color: "#17c666" },
+    { label: "Registros Financeiros", count: finRecs, color: "#ffa21d" },
+    { label: "Atividades Faculdade", count: acadTasks, color: "#ea4d4d" },
+    { label: "Exemplos Fine-Tune", count: ftCount, color: "#3dc7be" },
+  ];
+
+  // Cálculo dos arcos do SVG Donut
+  const radius = 62;
+  const circumference = 2 * Math.PI * radius;
+  let accumulatedPercent = 0;
+
+  return (
+    <div
+      className={`duralux-card rounded-xl border flex flex-col justify-between ${
+        darkMode
+          ? "bg-[#182235] border-slate-800 text-slate-100"
+          : "bg-white border-slate-200/90 text-[#283c50]"
+      }`}
+    >
+      <div
+        className={`px-6 py-4 border-b flex items-center justify-between ${
+          darkMode ? "border-slate-800" : "border-slate-100"
+        }`}
+      >
+        <div>
+          <h3 className="font-bold text-[15px] tracking-tight">
+            Composição da Memória
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Distribuição Híbrida (SQL + Vetores RAG)
+          </p>
+        </div>
+        <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#3454d1]/10 text-[#3454d1]">
+          {telemetry?.memory_stats.total_files_uploaded ?? 0} arquivos
+        </span>
+      </div>
+
+      {/* SVG Donut Central */}
+      <div className="p-6 flex flex-col items-center">
+        <div className="relative w-44 h-44 flex items-center justify-center">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 160 160">
+            <circle
+              cx="80"
+              cy="80"
+              r={radius}
+              fill="transparent"
+              stroke={darkMode ? "#1e293b" : "#f1f5f9"}
+              strokeWidth="18"
+            />
+            {items.map((item) => {
+              const pct = Math.max(0.04, item.count / totalItems);
+              const strokeDasharray = `${pct * circumference} ${circumference}`;
+              const strokeDashoffset = -accumulatedPercent * circumference;
+              accumulatedPercent += pct;
+              return (
+                <circle
+                  key={item.label}
+                  cx="80"
+                  cy="80"
+                  r={radius}
+                  fill="transparent"
+                  stroke={item.color}
+                  strokeWidth="18"
+                  strokeDasharray={strokeDasharray}
+                  strokeDashoffset={strokeDashoffset}
+                  strokeLinecap="butt"
+                />
+              );
+            })}
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <span className="text-2xl font-extrabold">{totalItems}</span>
+            <span className="text-[11px] text-slate-400 font-medium">
+              Itens na Memória
+            </span>
+          </div>
+        </div>
+
+        {/* Lista de Legendas em Grid Estilo Duralux */}
+        <div className="w-full grid grid-cols-1 gap-2 mt-4">
+          {items.map((item) => (
+            <div
+              key={item.label}
+              className={`flex items-center justify-between px-3 py-2 rounded-lg border text-xs ${
+                darkMode
+                  ? "bg-slate-900/60 border-slate-800"
+                  : "bg-slate-50/70 border-slate-200/70"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: item.color }}
+                />
+                <span className="font-medium">{item.label}</span>
+              </div>
+              <span className="font-bold">{item.count}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
