@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  Settings,
   Sparkles,
   Sun,
   Trash2,
@@ -41,6 +42,8 @@ import { MemoryDonutChart, PaymentAndUsageChart } from "./components/DuraluxChar
 import { StatementHistorySection } from "./components/StatementHistorySection";
 import type {
   AcademicTask,
+  ConversationDetail,
+  ConversationSummary,
   DocumentChunkItem,
   DocumentItem,
   FinanceSummary,
@@ -78,6 +81,12 @@ interface ChatMessage {
   latencyMs?: number;
 }
 
+const WELCOME_MESSAGE: ChatMessage = {
+  id: "welcome",
+  role: "agent",
+  text: "Olá, **Weuller**! Bem-vindo ao seu **Second Brain AI**.\n\nEstou conectado ao **Gemini** com *Function Calling* e **Hybrid RAG**. Você pode pedir para:\n- 💳 Registrar gastos de cartão, atualizar saldo de conta ou quitar faturas;\n- 🎓 Cadastrar provas, trabalhos e prazos da faculdade;\n- 🧠 Salvar fatos na **Memória Core** ou consultar seus **Arquivos PDF/TXT no RAG**.\n\nSuas conversas ficam salvas e podem ser reabertas ou excluídas na lista de conversas.",
+};
+
 function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return "0 B";
   const units = ["B", "KB", "MB", "GB"];
@@ -97,17 +106,21 @@ export default function App() {
   const [loading, setLoading] = useState(false);
 
   // Chat State
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      role: "agent",
-      text: "Olá, **Weuller**! Bem-vindo ao seu **Second Brain AI — Duralux Edition**.\n\nEstou conectado ao **Gemini (`gemini-3.8-flash`)** com *Function Calling* e **Hybrid RAG**. Você pode pedir para:\n- 💳 Registrar gastos de cartão, atualizar saldo de conta ou quitar faturas;\n- 🎓 Cadastrar provas, trabalhos e prazos da faculdade;\n- 🧠 Salvar fatos na **Memória Core** ou consultar seus **Arquivos PDF/TXT no RAG**.",
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
   const [chatInput, setChatInput] = useState("");
-  const [prevInteractionId, setPrevInteractionId] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState("gemini-3.5-flash-lite");
   const [saveForFinetune, setSaveForFinetune] = useState(false);
+
+  // Conversas salvas
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
+  const [showConversationsMobile, setShowConversationsMobile] = useState(false);
+
+  // Menu de configurações (modelo do agente)
+  const [showSettings, setShowSettings] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [settingsModelDraft, setSettingsModelDraft] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
 
   // Data States
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
@@ -336,9 +349,81 @@ export default function App() {
     return () => clearInterval(timer);
   }, [schedules]);
 
+  const loadConversations = async () => {
+    try {
+      setConversations(await api.getConversations());
+    } catch (err) {
+      console.error("Erro ao carregar conversas:", err);
+    }
+  };
+
   useEffect(() => {
     refreshAll();
+    loadConversations();
+    api
+      .getSettings()
+      .then((cfg) => {
+        setSelectedModel(cfg.agent_model);
+        setAvailableModels(cfg.available_models);
+      })
+      .catch((err) => console.error("Erro ao carregar configurações:", err));
   }, []);
+
+  const startNewConversation = () => {
+    setActiveConversationId(null);
+    setMessages([WELCOME_MESSAGE]);
+    setShowConversationsMobile(false);
+  };
+
+  const openConversation = async (id: number) => {
+    const conv: ConversationDetail = await api.getConversation(id);
+    setActiveConversationId(conv.id);
+    setMessages(
+      conv.messages.length
+        ? conv.messages.map((m) => ({
+            id: `db_${m.id}`,
+            role: m.role,
+            text: m.text,
+            model: m.meta?.model,
+            tools: m.meta?.tools,
+            ragSources: m.meta?.rag_sources,
+            tokens: m.meta?.tokens,
+            latencyMs: m.meta?.latency_ms,
+          }))
+        : [WELCOME_MESSAGE]
+    );
+    setShowConversationsMobile(false);
+  };
+
+  const deleteConversation = async (conv: ConversationSummary) => {
+    if (!window.confirm(`Excluir a conversa "${conv.title}"?`)) return;
+    await api.deleteConversation(conv.id);
+    if (conv.id === activeConversationId) startNewConversation();
+    await loadConversations();
+  };
+
+  const openSettings = () => {
+    setSettingsModelDraft(selectedModel);
+    setShowSettings(true);
+    setMobileMenuOpen(false);
+  };
+
+  const saveSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const model = settingsModelDraft.trim();
+    if (!model) return;
+    setSavingSettings(true);
+    try {
+      const cfg = await api.updateSettings({ agent_model: model });
+      setSelectedModel(cfg.agent_model);
+      setAvailableModels(cfg.available_models);
+      setShowSettings(false);
+    } catch (err: any) {
+      window.alert(`Erro ao salvar configurações: ${err.message || err}`);
+    } finally {
+      setSavingSettings(false);
+    }
+  };
 
   const handleSendMessage = async (customPrompt?: string) => {
     const promptText = (customPrompt ?? chatInput).trim();
@@ -356,13 +441,14 @@ export default function App() {
     try {
       const res = await api.sendChat({
         message: promptText,
-        previous_interaction_id: prevInteractionId,
+        conversation_id: activeConversationId,
         model: selectedModel,
         save_for_finetune: saveForFinetune,
       });
-      if (res.interaction_id) {
-        setPrevInteractionId(res.interaction_id);
+      if (res.conversation_id) {
+        setActiveConversationId(res.conversation_id);
       }
+      loadConversations();
       setMessages((prev) => [
         ...prev,
         {
@@ -452,6 +538,49 @@ export default function App() {
     }
     await refreshAll();
   };
+
+  const renderConversationList = () =>
+    conversations.length === 0 ? (
+      <p className="text-xs text-slate-400">
+        Nenhuma conversa salva ainda. Envie uma mensagem para começar.
+      </p>
+    ) : (
+      <div className="space-y-1 max-h-72 overflow-y-auto pr-1">
+        {conversations.map((conv) => (
+          <div
+            key={conv.id}
+            className={`group flex items-center gap-1 rounded-lg border text-xs ${
+              conv.id === activeConversationId
+                ? "border-[#3454d1] bg-[#3454d1]/10"
+                : "border-transparent hover:border-slate-300 dark:hover:border-slate-700"
+            }`}
+          >
+            <button
+              onClick={() => openConversation(conv.id)}
+              className="flex-1 min-w-0 text-left px-2.5 py-2"
+            >
+              <div className="font-semibold truncate">{conv.title}</div>
+              <div className="text-[10px] text-slate-400">
+                {new Date(conv.updated_at).toLocaleString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}{" "}
+                • {conv.message_count} msgs
+              </div>
+            </button>
+            <button
+              onClick={() => deleteConversation(conv)}
+              title="Excluir conversa"
+              className="p-2 text-slate-400 hover:text-[#ea4d4d] shrink-0"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+    );
 
   // Duralux Theme Classes
   const bgCanvas = darkMode ? "bg-[#0f172a] text-slate-100" : "bg-[#f4f6f9] text-[#283c50]";
@@ -545,21 +674,17 @@ export default function App() {
                 />
               </div>
 
-              {/* Seletor de modelo IA no mobile */}
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                  Modelo Gemini Ativo
-                </label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className={`w-full text-xs font-semibold rounded-lg px-2.5 py-2 border focus:outline-none ${inputSurface}`}
-                >
-                  <option value="gemini-3.5-flash-lite">🚀 gemini-3.5-flash-lite</option>
-                  <option value="gemini-3.8-flash">⚡ gemini-3.8-flash</option>
-                  <option value="gemini-4-argon">🧠 gemini-4-argon</option>
-                </select>
-              </div>
+              {/* Configurações (modelo do agente) no mobile */}
+              <button
+                onClick={openSettings}
+                className={`w-full flex items-center justify-between gap-2 text-xs font-semibold rounded-lg px-3 py-2.5 border ${inputSurface}`}
+              >
+                <span className="flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  Configurações
+                </span>
+                <span className="text-slate-400 truncate">{selectedModel}</span>
+              </button>
 
               {/* Lista completa de seções */}
               <div className="space-y-1 pt-1">
@@ -885,15 +1010,20 @@ export default function App() {
 
           {/* Right Controls: Model Pill + Theme Skin Toggle + Notifications + Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-            <select
-              value={selectedModel}
-              onChange={(e) => setSelectedModel(e.target.value)}
-              className={`hidden sm:block text-xs font-semibold rounded-lg px-2.5 py-1.5 border focus:outline-none ${inputSurface}`}
+            <button
+              onClick={openSettings}
+              title="Configurações"
+              className={`flex items-center gap-1.5 p-2 rounded-lg border transition-colors ${
+                darkMode
+                  ? "border-slate-700 bg-slate-800 text-slate-300"
+                  : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+              }`}
             >
-              <option value="gemini-3.5-flash-lite">🚀 gemini-3.5-flash-lite</option>
-              <option value="gemini-3.8-flash">⚡ gemini-3.8-flash</option>
-              <option value="gemini-4-argon">🧠 gemini-4-argon</option>
-            </select>
+              <Settings className="w-4 h-4" />
+              <span className="hidden md:inline text-xs font-semibold max-w-[140px] truncate">
+                {selectedModel}
+              </span>
+            </button>
 
             {/* Light / Dark Skin Toggle (Duralux Header Feature) */}
             <button
@@ -1065,15 +1195,14 @@ export default function App() {
                       <div className="text-xl font-extrabold tracking-tight text-[#17c666]">
                         R${" "}
                         {(
-                          finance?.salary_forecast?.projected_salary_leftover ??
-                          1869.99
+                          finance?.salary_forecast?.current_month_leftover ?? 0
                         ).toLocaleString("pt-BR", {
                           minimumFractionDigits: 2,
                         })}
                       </div>
                       <div className="text-xs font-semibold text-slate-400">
-                        Previsão Sobra Salário (R${" "}
-                        {(finance?.monthly_salary ?? 2800).toFixed(0)})
+                        Sobra do Salário no Mês (R${" "}
+                        {(finance?.monthly_salary ?? 0).toFixed(0)})
                       </div>
                     </div>
                   </div>
@@ -1089,7 +1218,7 @@ export default function App() {
                       R${" "}
                       {(
                         finance?.salary_forecast
-                          ?.next_month_cards_and_installments ?? 271.58
+                          ?.next_month_cards_and_installments ?? 0
                       ).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                     </span>
                   </div>
@@ -1100,7 +1229,7 @@ export default function App() {
                         width: `${Math.max(
                           10,
                           100 -
-                            (finance?.salary_forecast?.committed_percent ?? 33)
+                            (finance?.salary_forecast?.committed_percent ?? 0)
                         )}%`,
                       }}
                     />
@@ -1472,9 +1601,52 @@ export default function App() {
               ))}
             </div>
 
+            {/* Conversas salvas no mobile (< lg) */}
+            <div className="lg:hidden flex items-center gap-2">
+              <button
+                onClick={() => setShowConversationsMobile(!showConversationsMobile)}
+                className={`flex-1 text-xs font-bold px-3 py-2 rounded-lg border flex items-center justify-between ${cardSurface}`}
+              >
+                <span className="flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  Conversas ({conversations.length})
+                </span>
+                <ChevronRight
+                  className={`w-3.5 h-3.5 transition-transform ${showConversationsMobile ? "rotate-90" : ""}`}
+                />
+              </button>
+              <button
+                onClick={startNewConversation}
+                className="text-xs font-bold px-3 py-2 rounded-lg bg-[#3454d1] text-white flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nova
+              </button>
+            </div>
+            {showConversationsMobile && (
+              <div className={`lg:hidden duralux-card rounded-xl border p-3 ${cardSurface}`}>
+                {renderConversationList()}
+              </div>
+            )}
+
             {/* Painel Lateral Esquerdo Estilo Duralux Chat Sidebar (Desktop >= lg) */}
             <div className={`hidden lg:block lg:w-80 shrink-0 duralux-card rounded-xl border p-5 space-y-5 ${cardSurface}`}>
-              <div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="font-bold text-sm flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4 text-[#3454d1]" />
+                    Conversas Salvas
+                  </h3>
+                  <button
+                    onClick={startNewConversation}
+                    className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-[#3454d1] text-white flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Nova
+                  </button>
+                </div>
+                {renderConversationList()}
+              </div>
+
+              <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
                 <h3 className="font-bold text-sm flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#3454d1]" />
                   Comandos Rápidos do Dia a Dia
@@ -1516,14 +1688,6 @@ export default function App() {
                   </span>
                 </label>
 
-                {prevInteractionId && (
-                  <button
-                    onClick={() => setPrevInteractionId(null)}
-                    className="w-full py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    Limpar ID de Sessão ({prevInteractionId.slice(0, 10)}...)
-                  </button>
-                )}
               </div>
             </div>
 
@@ -1651,6 +1815,89 @@ export default function App() {
                 </button>
               </form>
             </div>
+          </div>
+        )}
+
+        {/* MENU DE CONFIGURAÇÕES */}
+        {showSettings && (
+          <div
+            className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+            onClick={() => setShowSettings(false)}
+          >
+            <form
+              onSubmit={saveSettings}
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-md rounded-xl border p-5 space-y-4 shadow-2xl ${cardSurface}`}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-sm flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-[#3454d1]" />
+                  Configurações
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  className="text-xs text-slate-400 hover:text-slate-200 font-bold"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Versão do modelo do agente
+                </label>
+                <div className="space-y-1.5">
+                  {availableModels.map((m) => (
+                    <label
+                      key={m}
+                      className={`flex items-center gap-2 text-xs px-3 py-2 rounded-lg border cursor-pointer ${
+                        settingsModelDraft === m
+                          ? "border-[#3454d1] bg-[#3454d1]/10"
+                          : "border-slate-200 dark:border-slate-700"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="agent-model"
+                        checked={settingsModelDraft === m}
+                        onChange={() => setSettingsModelDraft(m)}
+                      />
+                      <span className="font-mono">{m}</span>
+                    </label>
+                  ))}
+                </div>
+                <label className="block text-[11px] text-slate-400 pt-1">
+                  Ou digite o nome de outro modelo:
+                </label>
+                <input
+                  value={settingsModelDraft}
+                  onChange={(e) => setSettingsModelDraft(e.target.value)}
+                  placeholder="ex: gemini-3.8-flash"
+                  className={`w-full rounded-lg px-3 py-2 text-xs border font-mono ${inputSurface}`}
+                />
+                <p className="text-[11px] text-slate-400">
+                  Se o modelo escolhido falhar, o agente tenta automaticamente um modelo reserva.
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSettings(false)}
+                  className="px-3 py-2 text-xs font-bold text-slate-400"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingSettings}
+                  className="px-4 py-2 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white text-xs font-bold disabled:opacity-50"
+                >
+                  {savingSettings ? "Salvando..." : "Salvar"}
+                </button>
+              </div>
+            </form>
           </div>
         )}
 

@@ -84,8 +84,8 @@ export const StatementHistorySection: React.FC<
     setUploadingBill(true);
     setFeedbackMsg(null);
     try {
+      // O upload já importa os lançamentos deste arquivo
       await api.uploadDocument(file, "financas");
-      await api.syncStatements();
       setFeedbackMsg(
         `✅ Fatura "${file.name}" indexada! Gastos do mês, compras parceladas e próximos meses foram registrados automaticamente.`
       );

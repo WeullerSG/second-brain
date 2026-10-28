@@ -16,12 +16,18 @@ import {
   Wallet,
 } from "lucide-react";
 import { api } from "../api";
-import type { FinanceSummary } from "../types";
+import type { FinanceRecord, FinanceSummary, InstallmentContractItem } from "../types";
+import { FinanceRecordEditor, RECORD_CATEGORIES } from "./FinanceRecordEditor";
 
 interface CurrentFinancesSectionProps {
   finance: FinanceSummary;
   darkMode: boolean;
   onRefresh: () => Promise<void>;
+}
+
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
@@ -37,8 +43,10 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
   // Estado para editar Salário Mensal e Saldo Atual rapidamente
   const [editingSalary, setEditingSalary] = useState(false);
   const [salaryInput, setSalaryInput] = useState(
-    String(finance.salary_forecast?.monthly_salary ?? finance.monthly_salary ?? 2800)
+    String(finance.salary_forecast?.monthly_salary ?? finance.monthly_salary ?? 0)
   );
+  const defaultCardName =
+    finance.accounts.find((a) => a.account_type === "credit_card")?.name ?? "";
   const [editingBalanceAccId, setEditingBalanceAccId] = useState<number | null>(null);
   const [quickBalanceInput, setQuickBalanceInput] = useState("");
 
@@ -48,11 +56,57 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
   const [instAmount, setInstAmount] = useState("");
   const [instCurrent, setInstCurrent] = useState("1");
   const [instTotal, setInstTotal] = useState("2");
-  const [instCardName, setInstCardName] = useState("Cartão Mercado Pago Visa");
-  const [instDueDate, setInstDueDate] = useState("2026-11-14");
+  const [instCardName, setInstCardName] = useState(defaultCardName);
+  const [instDueDate, setInstDueDate] = useState(todayISO());
   const [instCurrentPaid, setInstCurrentPaid] = useState(false);
   const [instKind, setInstKind] = useState<"parcelado" | "financiamento">("parcelado");
   const isFinancing = instKind === "financiamento";
+
+  // Estados de edição (lançamentos, contas e parcelamentos)
+  const [editingRecordId, setEditingRecordId] = useState<number | null>(null);
+  const [editingAccountId, setEditingAccountId] = useState<number | null>(null);
+  const [editingInstId, setEditingInstId] = useState<number | null>(null);
+  const [editInstTitle, setEditInstTitle] = useState("");
+  const [editInstAmount, setEditInstAmount] = useState("");
+  const [editInstAccount, setEditInstAccount] = useState("");
+
+  const saveRecordEdit = async (id: number, data: Partial<FinanceRecord>) => {
+    await api.updateFinanceRecord(id, data);
+    setEditingRecordId(null);
+    await onRefresh();
+  };
+
+  const deleteRecord = async (rec: { id: number; title: string }) => {
+    if (!window.confirm(`Excluir "${rec.title}"?`)) return;
+    await api.deleteFinanceRecord(rec.id);
+    await onRefresh();
+  };
+
+  const startInstEdit = (inst: InstallmentContractItem) => {
+    setEditingInstId(inst.id);
+    setEditInstTitle(inst.title);
+    setEditInstAmount(String(inst.installment_amount));
+    setEditInstAccount(inst.account_name);
+  };
+
+  const saveInstEdit = async (inst: InstallmentContractItem) => {
+    const amt = parseFloat(editInstAmount.replace(",", "."));
+    await api.updateInstallmentGroup({
+      record_ids: inst.schedule.map((s) => s.record_id),
+      title: editInstTitle.trim() || undefined,
+      installment_amount: amt > 0 ? amt : undefined,
+      account_name: editInstAccount,
+    });
+    setEditingInstId(null);
+    await onRefresh();
+  };
+
+  const deleteInstGroup = async (inst: InstallmentContractItem) => {
+    const label = inst.category === "financiamento" ? "o financiamento" : "o parcelamento";
+    if (!window.confirm(`Excluir ${label} "${inst.title}" e todas as ${inst.schedule.length} parcelas?`)) return;
+    await api.deleteInstallmentGroup(inst.schedule.map((s) => s.record_id));
+    await onRefresh();
+  };
 
   // Estado para cadastrar Conta / Cartão
   const [showAccountForm, setShowAccountForm] = useState(false);
@@ -68,8 +122,8 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
   const [recAmount, setRecAmount] = useState("");
   const [recType, setRecType] = useState("expense");
   const [recCategory, setRecCategory] = useState("alimentacao");
-  const [recAccount, setRecAccount] = useState("Conta PicPay");
-  const [recDueDate, setRecDueDate] = useState("2026-10-28");
+  const [recAccount, setRecAccount] = useState(finance.accounts[0]?.name ?? "Principal");
+  const [recDueDate, setRecDueDate] = useState(todayISO());
   const [recStatus, setRecStatus] = useState("paid");
 
   // Aba de visualização dos gastos do mês atual e mês selecionado na projeção futura
@@ -89,41 +143,44 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
     : "bg-[#f8fafc] border-slate-200 text-[#283c50] placeholder-slate-400";
 
   const sf = finance.salary_forecast ?? {
-    monthly_salary: finance.monthly_salary ?? 2800,
+    monthly_salary: finance.monthly_salary ?? 0,
     current_checking_balance: finance.total_balance,
     total_credit_limit: finance.total_credit_limit,
     total_credit_used: finance.total_credit_used ?? 0,
     total_credit_available:
       finance.total_credit_available ?? finance.total_credit_limit,
-    current_month_label: "Outubro/2026",
+    current_month_label: "",
     spent_this_month: finance.paid_expenses,
-    next_month_label: "Novembro/2026",
-    next_month_installments_total: 54.7,
-    next_month_card_accumulated: 216.88,
-    next_month_cards_and_installments: 271.58,
-    next_month_fixed_bills: 658.43,
-    next_month_total_committed: 930.01,
-    projected_salary_leftover: 1869.99,
-    projected_leftover_after_cards_only: 2528.42,
-    committed_percent: 33.2,
-    savings_goal_20pct: 560,
-    free_after_savings_goal: 1309.99,
+    next_month_label: "",
+    next_month_installments_total: 0,
+    next_month_card_accumulated: 0,
+    next_month_cards_and_installments: 0,
+    next_month_fixed_bills: 0,
+    next_month_total_committed: 0,
+    projected_salary_leftover: 0,
+    projected_leftover_after_cards_only: 0,
+    committed_percent: 0,
+    savings_goal_20pct: 0,
+    free_after_savings_goal: 0,
   };
+  const currentMonthLeftover =
+    sf.current_month_leftover ?? sf.monthly_salary - sf.spent_this_month;
 
   const cm = finance.current_month_summary ?? {
-    month_key: "2026-10",
-    month_label: "Outubro/2026",
+    month_key: "",
+    month_label: "",
     salary_received: sf.monthly_salary,
     total_spent_this_month: finance.paid_expenses,
     paid_this_month: finance.paid_expenses,
     pending_this_month: 0,
-    card_bills_paid_this_month: 1186.92,
-    direct_expenses_this_month: 1351.45,
-    new_card_spend_next_bill: 271.58,
+    card_bills_paid_this_month: 0,
+    direct_expenses_this_month: 0,
+    new_card_spend_next_bill: 0,
     categories: [],
     items: finance.records.filter((r) => r.status === "paid" && r.record_type !== "income"),
     card_statement_items: [],
   };
+  const cardStatementTotal = cm.card_statement_items.reduce((sum, it) => sum + it.amount, 0);
 
   const instSummary = finance.installments_summary ?? {
     active_count: 0,
@@ -148,8 +205,8 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
     setUploadingFatura(true);
     setFeedbackBanner(null);
     try {
+      // O upload já importa os lançamentos deste arquivo
       await api.uploadDocument(file, "financas");
-      await api.syncStatements();
       await onRefresh();
       setFeedbackBanner(
         `✅ Fatura/Extrato "${file.name}" processado! Saldo atual, gastos do mês, compras parceladas e previsão dos próximos meses foram atualizados automaticamente.`
@@ -329,7 +386,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                 type="button"
                 onClick={() => {
                   setInstKind(value);
-                  setInstCardName(value === "financiamento" ? "" : "Cartão Mercado Pago Visa");
+                  setInstCardName(value === "financiamento" ? "" : defaultCardName);
                 }}
                 className={`px-3 py-1.5 rounded-md transition-colors ${
                   instKind === value ? "bg-[#3454d1] text-white" : "text-slate-400 hover:text-[#3454d1]"
@@ -502,7 +559,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
           </div>
           <div className="mt-4 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-xs space-y-1">
             <div className="flex justify-between">
-              <span className="text-slate-400">Faturas Pagas (MP + PicPay):</span>
+              <span className="text-slate-400">Faturas de Cartão Pagas:</span>
               <span className="font-bold">
                 R$ {formatBRL(cm.card_bills_paid_this_month)}
               </span>
@@ -541,7 +598,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-400">Cartão Acumulado (07/10):</span>
+              <span className="text-slate-400">Cartão Acumulado:</span>
               <span className="font-bold">
                 R$ {formatBRL(sf.next_month_card_accumulated)}
               </span>
@@ -557,18 +614,28 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             </div>
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Vai Sobrar do Salário ({sf.next_month_label})
+                Sobra do Salário ({cm.month_label})
               </div>
-              <div className="text-2xl font-extrabold text-[#17c666] mt-0.5">
-                R$ {formatBRL(sf.projected_salary_leftover)}
+              <div
+                className={`text-2xl font-extrabold mt-0.5 ${
+                  currentMonthLeftover < 0 ? "text-[#ea4d4d]" : "text-[#17c666]"
+                }`}
+              >
+                R$ {formatBRL(currentMonthLeftover)}
               </div>
             </div>
           </div>
           <div className="mt-4 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-xs space-y-1">
             <div className="flex justify-between">
-              <span className="text-slate-400">Sobra só após Cartões:</span>
+              <span className="text-slate-400">Gasto lançado no mês:</span>
+              <span className="font-bold text-[#ea4d4d]">
+                - R$ {formatBRL(cm.total_spent_this_month)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Previsão p/ {sf.next_month_label}:</span>
               <span className="font-bold text-[#17c666]">
-                R$ {formatBRL(sf.projected_leftover_after_cards_only)}
+                R$ {formatBRL(sf.projected_salary_leftover)}
               </span>
             </div>
             <div className="flex justify-between">
@@ -704,7 +771,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
           <div className="space-y-2.5 text-xs">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2.5 px-3 rounded-lg bg-[#17c666]/10 border border-[#17c666]/20">
               <span className="font-bold text-[#17c666]">
-                (+) Salário Mensal (INF SERVICES LTDA)
+                (+) Salário Mensal
               </span>
               <span className="font-extrabold text-sm text-[#17c666] whitespace-nowrap">
                 + R$ {formatBRL(sf.monthly_salary)}
@@ -717,7 +784,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                   (-) Compras Parceladas Anotadas da Fatura ({sf.next_month_label})
                 </div>
                 <div className="text-[11px] text-slate-400">
-                  AMAZON BR *Amazon BR (Parcela 2 de 2 no Cartão Mercado Pago)
+                  Parcelamentos e financiamentos com vencimento no mês
                 </div>
               </div>
               <span className="font-extrabold text-[#ea4d4d] whitespace-nowrap shrink-0">
@@ -731,7 +798,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                   (-) Gastos no Cartão já Acumulados para a Próxima Fatura
                 </div>
                 <div className="text-[11px] text-slate-400">
-                  PicPay Card em 07/10: Faculdade parcial (R$ 112,73) + iFood (R$ 94,10) + Papelaria (R$ 10,05)
+                  Compras no cartão lançadas para a próxima fatura
                 </div>
               </div>
               <span className="font-extrabold text-[#ea4d4d] whitespace-nowrap shrink-0">
@@ -754,7 +821,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                   (-) Contas Fixas Mensais Previstas ({sf.next_month_label})
                 </div>
                 <div className="text-[11px] text-slate-400">
-                  Faculdade Editora Educacional (R$ 395,13) + Energia CEMIG (R$ 201,42) + Assinaturas (R$ 61,88)
+                  Contas e gastos no saldo previstos para o mês
                 </div>
               </div>
               <span className="font-extrabold text-[#ea4d4d] whitespace-nowrap shrink-0">
@@ -794,11 +861,19 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                   Meu Saldo Atual & Cartões
                 </h3>
                 <p className="text-xs text-slate-400">
-                  Extraídos do extrato PicPay e da fatura Mercado Pago
+                  Cadastrados por você ou extraídos dos PDFs enviados
                 </p>
               </div>
               <button
-                onClick={() => setShowAccountForm(!showAccountForm)}
+                onClick={() => {
+                  setShowAccountForm(!showAccountForm);
+                  setEditingAccountId(null);
+                  setAccName("");
+                  setAccBalance("");
+                  setAccLimit("");
+                  setAccClosingDay("");
+                  setAccDueDay("");
+                }}
                 className="px-2.5 py-1.5 rounded-lg bg-[#3454d1]/10 text-[#3454d1] hover:bg-[#3454d1] hover:text-white text-xs font-bold transition-colors shrink-0"
               >
                 {showAccountForm ? "Fechar" : "+ Conta / Cartão"}
@@ -922,15 +997,33 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                             <Edit3 className="w-3 h-3" />
                             {isCard ? "Ajustar valor em aberto" : "Atualizar saldo atual"}
                           </button>
-                          <button
-                            onClick={async () => {
-                              await api.deleteAccount(acc.id);
-                              await onRefresh();
-                            }}
-                            className="text-[11px] text-slate-400 hover:text-[#ea4d4d] font-semibold"
-                          >
-                            Remover
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => {
+                                setEditingAccountId(acc.id);
+                                setAccName(acc.name);
+                                setAccType(acc.account_type);
+                                setAccBalance(String(acc.balance));
+                                setAccLimit(String(acc.credit_limit));
+                                setAccClosingDay(acc.closing_day ? String(acc.closing_day) : "");
+                                setAccDueDay(acc.due_day ? String(acc.due_day) : "");
+                                setShowAccountForm(true);
+                              }}
+                              className="text-[11px] text-slate-400 hover:text-[#3454d1] font-semibold"
+                            >
+                              Editar
+                            </button>
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm(`Remover "${acc.name}"?`)) return;
+                                await api.deleteAccount(acc.id);
+                                await onRefresh();
+                              }}
+                              className="text-[11px] text-slate-400 hover:text-[#ea4d4d] font-semibold"
+                            >
+                              Remover
+                            </button>
+                          </div>
                         </>
                       )}
                     </div>
@@ -945,14 +1038,25 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               onSubmit={async (e) => {
                 e.preventDefault();
                 if (!accName.trim()) return;
-                await api.upsertAccount({
+                const accData = {
                   name: accName.trim(),
                   account_type: accType,
                   balance: parseFloat(accBalance || "0"),
                   credit_limit: parseFloat(accLimit || "0"),
                   closing_day: accClosingDay ? parseInt(accClosingDay, 10) : null,
                   due_day: accDueDay ? parseInt(accDueDay, 10) : null,
-                });
+                };
+                try {
+                  if (editingAccountId) {
+                    await api.updateAccount(editingAccountId, accData);
+                  } else {
+                    await api.upsertAccount(accData);
+                  }
+                } catch (err: any) {
+                  window.alert(`Não foi possível salvar: ${err.message || err}`);
+                  return;
+                }
+                setEditingAccountId(null);
                 setAccName("");
                 setAccBalance("");
                 setAccLimit("");
@@ -964,7 +1068,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               className={`space-y-2.5 p-4 rounded-xl border ${subtleSurface}`}
             >
               <div className="text-xs font-bold text-[#3454d1]">
-                Cadastrar / Atualizar Conta ou Cartão
+                {editingAccountId ? "Editar Conta ou Cartão" : "Cadastrar Conta ou Cartão"}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <input
@@ -1114,8 +1218,70 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                         <div className="text-sm font-extrabold text-[#ea4d4d]">
                           R$ {formatBRL(inst.remaining_total_amount)}
                         </div>
+                        <div className="flex justify-end gap-2 mt-1">
+                          <button
+                            onClick={() => startInstEdit(inst)}
+                            className="text-slate-400 hover:text-[#3454d1] p-0.5"
+                            title="Editar"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteInstGroup(inst)}
+                            className="text-slate-400 hover:text-[#ea4d4d] p-0.5"
+                            title="Excluir todas as parcelas"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
+
+                    {editingInstId === inst.id && (
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          saveInstEdit(inst);
+                        }}
+                        className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+                      >
+                        <input
+                          value={editInstTitle}
+                          onChange={(e) => setEditInstTitle(e.target.value)}
+                          placeholder="Nome"
+                          className={`rounded-lg px-2.5 py-2 text-xs border ${inputSurface}`}
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editInstAmount}
+                          onChange={(e) => setEditInstAmount(e.target.value)}
+                          placeholder="Valor da parcela"
+                          className={`rounded-lg px-2.5 py-2 text-xs border ${inputSurface}`}
+                        />
+                        <input
+                          value={editInstAccount}
+                          onChange={(e) => setEditInstAccount(e.target.value)}
+                          placeholder="Cartão / Banco"
+                          className={`rounded-lg px-2.5 py-2 text-xs border ${inputSurface}`}
+                        />
+                        <div className="sm:col-span-3 flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingInstId(null)}
+                            className="px-3 py-1.5 text-xs font-bold text-slate-400"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-4 py-1.5 rounded-lg bg-[#17c666] text-white text-xs font-bold"
+                          >
+                            Salvar em todas as parcelas
+                          </button>
+                        </div>
+                      </form>
+                    )}
 
                     {/* Progresso das parcelas */}
                     <div className="space-y-1">
@@ -1297,7 +1463,17 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                     do seu salário!
                   </div>
                 ) : (
-                  activeUpcomingMonth.items.map((item) => (
+                  activeUpcomingMonth.items.map((item) =>
+                    editingRecordId === item.id ? (
+                      <div key={item.id} className={`rounded-xl border p-3 ${subtleSurface}`}>
+                        <FinanceRecordEditor
+                          record={item}
+                          inputSurface={inputSurface}
+                          onSave={(data) => saveRecordEdit(item.id, data)}
+                          onCancel={() => setEditingRecordId(null)}
+                        />
+                      </div>
+                    ) : (
                     <div
                       key={item.id}
                       className={`rounded-xl border p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${subtleSurface}`}
@@ -1339,10 +1515,14 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                             {item.status === "paid" ? "Pago" : "Marcar Pago"}
                           </button>
                           <button
-                            onClick={async () => {
-                              await api.deleteFinanceRecord(item.id);
-                              await onRefresh();
-                            }}
+                            onClick={() => setEditingRecordId(item.id)}
+                            className="text-slate-400 hover:text-[#3454d1] p-1"
+                            title="Editar lançamento"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteRecord(item)}
                             className="text-slate-400 hover:text-[#ea4d4d] p-1"
                             title="Remover lançamento futuro"
                           >
@@ -1351,7 +1531,8 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                         </div>
                       </div>
                     </div>
-                  ))
+                    )
+                  )
                 )}
               </div>
             </div>
@@ -1374,7 +1555,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             </h3>
             <p className="text-xs text-slate-400">
               Veja todas as faturas e contas pagas no mês ou inspecione os{" "}
-              {cm.card_statement_items.length} gastos individuais da Fatura do Cartão Mercado Pago
+              {cm.card_statement_items.length} gastos individuais das faturas enviadas
             </p>
           </div>
 
@@ -1401,7 +1582,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                   : "bg-slate-100 text-slate-600"
               }`}
             >
-              Compras da Fatura Cartão ({cm.card_statement_items.length} itens • R$ 606,74)
+              Compras da Fatura Cartão ({cm.card_statement_items.length} itens • R$ {formatBRL(cardStatementTotal)})
             </button>
             <button
               onClick={() => setMonthSpendView("all_records")}
@@ -1436,7 +1617,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             setRecAmount("");
             await onRefresh();
           }}
-          className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5 p-3.5 rounded-xl border ${subtleSurface}`}
+          className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-2.5 p-3.5 rounded-xl border ${subtleSurface}`}
         >
           <input
             type="text"
@@ -1458,16 +1639,11 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             onChange={(e) => setRecCategory(e.target.value)}
             className={`rounded-lg px-2.5 py-2 text-xs border ${inputSurface}`}
           >
-            <option value="alimentacao">Alimentação</option>
-            <option value="cartao">Cartão / Fatura</option>
-            <option value="parcelado">Compra Parcelada</option>
-            <option value="faculdade">Faculdade</option>
-            <option value="moradia">Moradia / Luz / Internet</option>
-            <option value="transporte">Transporte / Posto</option>
-            <option value="assinaturas & lazer">Assinaturas & Lazer</option>
-            <option value="pessoal">Pessoal / Pix</option>
-            <option value="salario">Salário / Receita</option>
-            <option value="outros">Outros</option>
+            {RECORD_CATEGORIES.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
           <select
             value={recType}
@@ -1484,6 +1660,18 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             onChange={(e) => setRecDueDate(e.target.value)}
             className={`rounded-lg px-2.5 py-2 text-xs border ${inputSurface}`}
           />
+          <input
+            list="finance-account-names"
+            value={recAccount}
+            onChange={(e) => setRecAccount(e.target.value)}
+            placeholder="Conta / Cartão"
+            className={`rounded-lg px-2.5 py-2 text-xs border ${inputSurface}`}
+          />
+          <datalist id="finance-account-names">
+            {finance.accounts.map((a) => (
+              <option key={a.id} value={a.name} />
+            ))}
+          </datalist>
           <button
             type="submit"
             className="bg-[#17c666] hover:brightness-95 text-white rounded-lg px-3 py-2.5 sm:py-2 text-xs font-bold flex items-center justify-center gap-1"
@@ -1496,11 +1684,10 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
           <div className="space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-slate-400 px-1">
               <span>
-                Mostrando todos os {cm.card_statement_items.length} consumos da{" "}
-                <strong>Fatura de Outubro/2026 (Cartão Mercado Pago Visa •••• 6453)</strong>
+                Mostrando todos os {cm.card_statement_items.length} consumos das faturas enviadas
               </span>
               <span className="font-extrabold text-[#ea4d4d] whitespace-nowrap">
-                Soma da Fatura: R$ 606,74 (Paga em 09/10/2026)
+                Soma: R$ {formatBRL(cardStatementTotal)}
               </span>
             </div>
 
@@ -1598,7 +1785,17 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
         ) : (
           <div className="space-y-2.5 max-h-[460px] overflow-y-auto">
             {(monthSpendView === "consolidated" ? cm.items : finance.records).map(
-              (rec) => (
+              (rec) =>
+                editingRecordId === rec.id ? (
+                  <div key={rec.id} className={`rounded-xl border p-3.5 ${subtleSurface}`}>
+                    <FinanceRecordEditor
+                      record={rec}
+                      inputSurface={inputSurface}
+                      onSave={(data) => saveRecordEdit(rec.id, data)}
+                      onCancel={() => setEditingRecordId(null)}
+                    />
+                  </div>
+                ) : (
                 <div
                   key={rec.id}
                   className={`rounded-xl border p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${subtleSurface}`}
@@ -1653,11 +1850,16 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                       </button>
 
                       <button
-                        onClick={async () => {
-                          await api.deleteFinanceRecord(rec.id);
-                          await onRefresh();
-                        }}
+                        onClick={() => setEditingRecordId(rec.id)}
+                        className="text-slate-400 hover:text-[#3454d1] p-1"
+                        title="Editar lançamento"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteRecord(rec)}
                         className="text-slate-400 hover:text-[#ea4d4d] p-1"
+                        title="Excluir lançamento"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>

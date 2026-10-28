@@ -1,6 +1,9 @@
 import type {
   AcademicTask,
+  AppSettings,
   ChatResponse,
+  ConversationDetail,
+  ConversationSummary,
   DocumentChunkItem,
   DocumentItem,
   FinanceSummary,
@@ -42,10 +45,29 @@ export const api = {
     previous_interaction_id?: string | null;
     model?: string;
     save_for_finetune?: boolean;
+    conversation_id?: number | null;
   }) =>
     request<ChatResponse>("/chat", {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+  getConversations: () => request<ConversationSummary[]>("/chat/conversations"),
+  getConversation: (id: number) =>
+    request<ConversationDetail>(`/chat/conversations/${id}`),
+  renameConversation: (id: number, title: string) =>
+    request<ConversationSummary>(`/chat/conversations/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ title }),
+    }),
+  deleteConversation: (id: number) =>
+    request(`/chat/conversations/${id}`, { method: "DELETE" }),
+
+  // Configurações
+  getSettings: () => request<AppSettings>("/settings"),
+  updateSettings: (data: { agent_model: string }) =>
+    request<AppSettings>("/settings", {
+      method: "PUT",
+      body: JSON.stringify(data),
     }),
 
   // Core Memory Facts
@@ -156,8 +178,38 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  updateAccount: (
+    id: number,
+    data: {
+      name: string;
+      account_type: string;
+      balance: number;
+      credit_limit: number;
+      closing_day?: number | null;
+      due_day?: number | null;
+    }
+  ) =>
+    request(`/finances/accounts/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
   deleteAccount: (id: number) =>
     request(`/finances/accounts/${id}`, { method: "DELETE" }),
+  updateInstallmentGroup: (data: {
+    record_ids: number[];
+    title?: string;
+    installment_amount?: number;
+    account_name?: string;
+  }) =>
+    request("/finances/installments", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteInstallmentGroup: (recordIds: number[]) =>
+    request("/finances/installments/delete", {
+      method: "POST",
+      body: JSON.stringify({ record_ids: recordIds }),
+    }),
   createFinanceRecord: (data: {
     title: string;
     category: string;

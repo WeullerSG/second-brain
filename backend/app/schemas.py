@@ -94,6 +94,18 @@ class InstallmentCreate(BaseModel):
     notes: Optional[str] = None
 
 
+class InstallmentGroupUpdate(BaseModel):
+    """Edita todas as parcelas de um parcelamento/financiamento de uma vez."""
+    record_ids: list[int]
+    title: Optional[str] = None
+    installment_amount: Optional[float] = Field(default=None, gt=0)
+    account_name: Optional[str] = None
+
+
+class InstallmentGroupDelete(BaseModel):
+    record_ids: list[int]
+
+
 class SalaryUpdatePayload(BaseModel):
     monthly_salary: float = Field(..., gt=0)
     account_name: str = "Conta PicPay"
@@ -139,6 +151,7 @@ class ChatRequest(BaseModel):
     previous_interaction_id: Optional[str] = None
     model: Optional[str] = None
     save_for_finetune: bool = False
+    conversation_id: Optional[int] = None
 
 
 class ToolCallTrace(BaseModel):
@@ -155,6 +168,46 @@ class ChatResponse(BaseModel):
     rag_sources: list[dict[str, Any]] = []
     tokens_used: int = 0
     latency_ms: int = 0
+    conversation_id: Optional[int] = None
+
+
+# --- Conversas salvas do chat ---
+class ConversationOut(BaseModel):
+    id: int
+    title: str
+    model: Optional[str] = None
+    message_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationMessageOut(BaseModel):
+    id: int
+    role: str
+    text: str
+    meta: Optional[dict[str, Any]] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ConversationDetailOut(ConversationOut):
+    last_interaction_id: Optional[str] = None
+    messages: list[ConversationMessageOut] = []
+
+
+class ConversationRename(BaseModel):
+    title: str = Field(..., min_length=1, max_length=160)
+
+
+# --- Configurações do app ---
+class AppSettingsOut(BaseModel):
+    agent_model: str
+    available_models: list[str]
+
+
+class AppSettingsUpdate(BaseModel):
+    agent_model: str = Field(..., min_length=1, max_length=80)
 
 
 # --- Fine-Tune Dataset ---

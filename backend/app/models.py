@@ -175,3 +175,44 @@ class ScheduleNotification(Base):
     last_triggered_at = Column(String(40), nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
+
+
+class Conversation(Base):
+    """Conversa salva com o agente (lista de mensagens que pode ser reaberta ou excluída)."""
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(160), nullable=False, default="Nova conversa")
+    model = Column(String(80), nullable=True)
+    last_interaction_id = Column(String(160), nullable=True)  # continua o contexto no Gemini
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+    messages = relationship(
+        "ConversationMessage",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="ConversationMessage.id",
+    )
+
+
+class ConversationMessage(Base):
+    __tablename__ = "conversation_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(16), nullable=False)  # user | agent
+    text = Column(Text, nullable=False)
+    meta = Column(JSON, nullable=True)  # modelo, tools, fontes RAG, tokens, latência
+    created_at = Column(DateTime, default=utcnow)
+
+    conversation = relationship("Conversation", back_populates="messages")
+
+
+class AppSetting(Base):
+    """Configurações simples do app guardadas como chave/valor (ex: modelo do agente)."""
+    __tablename__ = "app_settings"
+
+    key = Column(String(80), primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)

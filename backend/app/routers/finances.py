@@ -16,6 +16,8 @@ from app.schemas import (
     FinanceRecordOut,
     FinanceRecordUpdate,
     InstallmentCreate,
+    InstallmentGroupDelete,
+    InstallmentGroupUpdate,
     SalaryUpdatePayload,
 )
 from app.services.embeddings import get_genai_client
@@ -605,7 +607,11 @@ def _ensure_record(
     return True
 
 
-def sync_financial_documents_to_db(db: Session, force_account_update: bool = False) -> dict[str, Any]:
+def sync_financial_documents_to_db(
+    db: Session,
+    force_account_update: bool = False,
+    doc_ids: Optional[list[int]] = None,
+) -> dict[str, Any]:
     """
     Sincroniza automaticamente os PDFs/arquivos de fatura e extrato enviados pelo usuário:
     1. Remove os dados fictícios iniciais (seed de exemplo) caso documentos reais estejam presentes;
@@ -613,7 +619,12 @@ def sync_financial_documents_to_db(db: Session, force_account_update: bool = Fal
     3. Registra o que já foi gasto no mês atual (Outubro/2026);
     4. Anota automaticamente o que tem parcelado na fatura e deixa registrado o que vem nos próximos meses.
     """
-    all_docs = db.query(DocumentFile).order_by(DocumentFile.created_at.asc()).all()
+    docs_query = db.query(DocumentFile)
+    if doc_ids is not None:
+        # Só reprocessa os documentos pedidos (ex: o PDF recém-enviado), para não
+        # recriar lançamentos que o usuário já excluiu de PDFs antigos.
+        docs_query = docs_query.filter(DocumentFile.id.in_(doc_ids))
+    all_docs = docs_query.order_by(DocumentFile.created_at.asc()).all()
     if not all_docs:
         return {"synced": False, "reason": "no_documents"}
 
@@ -1109,22 +1120,11 @@ def _get_monthly_salary(db: Session, records: list[FinanceRecord]) -> float:
     sal_recs = [r for r in records if r.record_type == "income" and r.category == "salario"]
     if sal_recs:
         return round(sal_recs[0].amount, 2)
-    return 2800.0
+    return 0.0
 
 
 @router.get("/summary")
 def get_finance_summary(db: Session = Depends(get_db)):
-    # Se ainda houver os dados de seed antigos ou nenhum lançamento das faturas enviadas, sincroniza automaticamente
-    has_docs = db.query(DocumentFile).count() > 0
-    has_fake_seed = (
-        db.query(FinanceAccount)
-        .filter(FinanceAccount.name == "Nubank (Conta + Cartão)", FinanceAccount.balance == 2450.0)
-        .first()
-        is not None
-    )
-    if has_docs and (has_fake_seed or db.query(FinanceAccount).count() == 0):
-        sync_financial_documents_to_db(db, force_account_update=True)
-
     accounts = db.query(FinanceAccount).order_by(FinanceAccount.account_type.asc(), FinanceAccount.name.asc()).all()
     records = db.query(FinanceRecord).order_by(FinanceRecord.due_date.asc(), FinanceRecord.created_at.desc()).all()
 
@@ -1154,7 +1154,7 @@ def get_finance_summary(db: Session = Depends(get_db)):
 
     # Determina mês atual (ex: "2026-10")
     now_str = datetime.now().strftime("%Y-%m")
-    current_month_key = now_str if any((r.due_date or "").startswith(now_str) for r in records) else "2026-10"
+    current_month_key = now_str
     current_month_label = _format_month_label(current_month_key)
 
     # --- 1. O QUE JÁ GASTEI ESSE MÊS (MÊS ATUAL) ---
@@ -1185,6 +1185,18 @@ def get_finance_summary(db: Session = Depends(get_db)):
         2,
     )
     new_card_spend_next_bill = round(sum(r.amount for r in oct_card_purchases_for_next_bill), 2)
+
+    # Entradas extras do mês (Pix recebido, freela...). O salário em si já entra por monthly_salary.
+    extra_income_this_month = round(
+        sum(
+            r.amount
+            for r in records
+            if r.record_type == "income"
+            and r.category != "salario"
+            and (r.due_date or "").startswith(current_month_key)
+        ),
+        2,
+    )
 
     month_cat_totals: dict[str, float] = {}
     for r in current_month_records:
@@ -1374,6 +1386,9 @@ def get_finance_summary(db: Session = Depends(get_db)):
         "total_credit_available": total_credit_available,
         "current_month_label": current_month_label,
         "spent_this_month": total_spent_this_month,
+        "extra_income_this_month": extra_income_this_month,
+        # Quanto ainda sobra do salário deste mês depois de tudo que foi lançado nele
+        "current_month_leftover": round(monthly_salary + extra_income_this_month - total_spent_this_month, 2),
         "next_month_label": next_month_proj["month_label"],
         "next_month_installments_total": next_month_proj["installments_total"],
         "next_month_card_accumulated": next_month_proj["card_accumulated_total"],
@@ -1487,6 +1502,40 @@ def create_installment_purchase(payload: InstallmentCreate, db: Session = Depend
         "total_installments": tot_n,
         "category": category,
     }
+
+
+@router.put("/installments")
+def update_installment_group(payload: InstallmentGroupUpdate, db: Session = Depends(get_db)):
+    """Edita nome, valor da parcela e cartão/banco de todas as parcelas de um parcelamento."""
+    recs = db.query(FinanceRecord).filter(FinanceRecord.id.in_(payload.record_ids)).all()
+    if not recs:
+        raise HTTPException(status_code=404, detail="Parcelamento não encontrado")
+    new_title = payload.title.strip() if payload.title else None
+    for rec in recs:
+        if new_title:
+            info = _detect_installment_info(rec.title) or _detect_installment_info(rec.notes or "")
+            if info:
+                rec.title = f"{new_title} (Parcela {info['current_installment']} de {info['total_installments']})"
+            else:
+                rec.title = new_title
+        if payload.installment_amount is not None:
+            rec.amount = round(payload.installment_amount, 2)
+        if payload.account_name is not None:
+            rec.account_name = payload.account_name
+    db.commit()
+    return {"status": "updated", "updated_count": len(recs)}
+
+
+@router.post("/installments/delete")
+def delete_installment_group(payload: InstallmentGroupDelete, db: Session = Depends(get_db)):
+    """Exclui todas as parcelas de um parcelamento/financiamento."""
+    deleted = (
+        db.query(FinanceRecord)
+        .filter(FinanceRecord.id.in_(payload.record_ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return {"status": "deleted", "deleted_count": deleted}
 
 
 @router.post("/salary")
@@ -1686,6 +1735,32 @@ def upsert_account(payload: FinanceAccountUpsert, db: Session = Depends(get_db))
     else:
         acc = FinanceAccount(**payload.model_dump())
         db.add(acc)
+    db.commit()
+    db.refresh(acc)
+    return acc
+
+
+@router.put("/accounts/{account_id}", response_model=FinanceAccountOut)
+def update_account(account_id: int, payload: FinanceAccountUpsert, db: Session = Depends(get_db)):
+    """Edita uma conta/cartão existente (permite renomear)."""
+    acc = db.query(FinanceAccount).filter(FinanceAccount.id == account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Conta não encontrada")
+    clash = (
+        db.query(FinanceAccount)
+        .filter(FinanceAccount.name == payload.name, FinanceAccount.id != account_id)
+        .first()
+    )
+    if clash:
+        raise HTTPException(status_code=409, detail="Já existe uma conta com esse nome")
+    old_name = acc.name
+    for field, value in payload.model_dump().items():
+        setattr(acc, field, value)
+    if old_name != acc.name:
+        # Mantém os lançamentos ligados à conta renomeada
+        db.query(FinanceRecord).filter(FinanceRecord.account_name == old_name).update(
+            {FinanceRecord.account_name: acc.name}, synchronize_session=False
+        )
     db.commit()
     db.refresh(acc)
     return acc

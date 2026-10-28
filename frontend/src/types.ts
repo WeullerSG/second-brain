@@ -85,6 +85,8 @@ export interface SalaryForecast {
   total_credit_available: number;
   current_month_label: string;
   spent_this_month: number;
+  extra_income_this_month?: number;
+  current_month_leftover?: number;
   next_month_label: string;
   next_month_installments_total: number;
   next_month_card_accumulated: number;
@@ -233,6 +235,40 @@ export interface ChatResponse {
   }>;
   tokens_used: number;
   latency_ms: number;
+  conversation_id?: number | null;
+}
+
+export interface ConversationSummary {
+  id: number;
+  title: string;
+  model?: string | null;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ConversationMessageItem {
+  id: number;
+  role: "user" | "agent";
+  text: string;
+  meta?: {
+    model?: string;
+    tools?: ToolCallTrace[];
+    rag_sources?: ChatResponse["rag_sources"];
+    tokens?: number;
+    latency_ms?: number;
+  } | null;
+  created_at: string;
+}
+
+export interface ConversationDetail extends ConversationSummary {
+  last_interaction_id?: string | null;
+  messages: ConversationMessageItem[];
+}
+
+export interface AppSettings {
+  agent_model: string;
+  available_models: string[];
 }
 
 export interface FineTuneExample {

@@ -42,7 +42,7 @@ async def upload_document(
     db: Session = Depends(get_db),
 ):
     doc = await ingest_uploaded_file(db=db, upload=file, category=category)
-    finance_sync = sync_financial_documents_to_db(db=db, force_account_update=True)
+    finance_sync = sync_financial_documents_to_db(db=db, force_account_update=True, doc_ids=[doc.id])
     return {
         "id": doc.id,
         "filename": doc.filename,
