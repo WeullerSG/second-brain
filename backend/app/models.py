@@ -59,6 +59,8 @@ class FinanceRecord(Base):
     due_date = Column(String(32), nullable=True)  # YYYY-MM-DD
     status = Column(String(32), default="pending")  # pending | paid
     notes = Column(Text, nullable=True)
+    # Impressão digital da transação no extrato/fatura (evita importar duas vezes)
+    external_id = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime, default=utcnow)
 
 

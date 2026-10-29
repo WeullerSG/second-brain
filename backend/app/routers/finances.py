@@ -391,12 +391,24 @@ def _parse_bank_extrato_doc(text: str, filename: str, doc_id: int) -> Optional[d
     Analisa PDFs de extrato de conta corrente/pagamentos (ex: PicPay, Nubank, Itaú).
     Extrai saldo final atual, salário recebido, gastos do mês no saldo e compras feitas com cartão.
     """
+    from app.services.statement_import import (
+        detect_account_digits,
+        detect_bank,
+        detect_holder_name,
+        parse_generic_statement,
+    )
+
     lower_txt = (text or "").lower()
-    if "extrato de conta" not in lower_txt and "saldo ao final do dia" not in lower_txt:
+    is_picpay_format = "saldo ao final do dia" in lower_txt
+    looks_like_statement = "extrato" in lower_txt and "saldo" in lower_txt and "fatura" not in lower_txt[:600]
+    if "extrato de conta" not in lower_txt and not is_picpay_format and not looks_like_statement:
         return None
 
-    account_name = "Conta PicPay" if "picpay" in lower_txt else f"Conta Corrente ({filename})"
-    card_companion_name = "Cartão PicPay Card" if "picpay" in lower_txt else "Cartão da Conta"
+    bank = detect_bank(text, filename)
+    holder = detect_holder_name(text)
+    holder_plain = (holder or "").lower()
+    account_name = f"Conta {bank}" if bank else "Conta Corrente"
+    card_companion_name = f"Cartão {bank}" if bank else "Cartão da Conta"
 
     lines = [l.strip() for l in (text or "").splitlines() if l.strip()]
     cur_date: Optional[str] = None
@@ -467,9 +479,15 @@ def _parse_bank_extrato_doc(text: str, filename: str, doc_id: int) -> Optional[d
             if dedup not in seen_tx:
                 seen_tx.add(dedup)
                 lower_desc = full_desc.lower()
-                is_self = "weuller silva gomes" in lower_desc or "do cofrinho" in lower_desc or "guardado no cofrinho" in ttype.lower()
-                is_pass_through = val >= 14900.0  # Repasse pontual de 15.000 -> 14.970
-                is_salary = direction == "in" and ("inf services" in lower_desc or val == 2800.0)
+                # Pix entre contas suas (titular do extrato), cofrinho e resgates não são gasto nem receita
+                is_self = (
+                    bool(holder_plain and holder_plain in lower_desc)
+                    or "cofrinho" in lower_desc
+                    or "cofrinho" in ttype.lower()
+                    or "dinheiro resgatado" in ttype.lower()
+                )
+                is_pass_through = False
+                is_salary = direction == "in" and any(k in lower_desc for k in ("salario", "salário", "folha de pagamento"))
 
                 transactions.append(
                     {
@@ -490,6 +508,21 @@ def _parse_bank_extrato_doc(text: str, filename: str, doc_id: int) -> Optional[d
             i = j
             continue
         i += 1
+
+    # Outros bancos: formato "dd/mm/aaaa descrição valor"
+    if not transactions:
+        for tx in parse_generic_statement(text):
+            lower_desc = tx["title"].lower()
+            tx["is_self_transfer"] = bool(holder_plain and holder_plain in lower_desc)
+            tx["is_pass_through"] = False
+            tx["is_salary"] = tx["direction"] == "in" and any(k in lower_desc for k in ("salario", "salário", "folha"))
+            tx["category"] = "salario" if tx["is_salary"] else _guess_category(tx["title"])
+            transactions.append(tx)
+        if latest_balance is None:
+            bal = re.findall(r"saldo[^\n]{0,40}?(-?\d{1,3}(?:\.\d{3})*,\d{2})", text or "", re.IGNORECASE)
+            if bal:
+                latest_balance = _parse_brl_amount(bal[-1].lstrip("-")) * (-1 if bal[-1].startswith("-") else 1)
+                latest_balance_date = max((t["date_iso"] for t in transactions), default=None)
 
     # Itens de despesa reais (excluindo auto-transferência e repasse atípico) para o histórico
     expense_items: list[dict[str, Any]] = []
@@ -513,13 +546,16 @@ def _parse_bank_extrato_doc(text: str, filename: str, doc_id: int) -> Optional[d
         )
 
     salary_txs = [t for t in transactions if t["is_salary"]]
-    detected_salary = salary_txs[0]["amount"] if salary_txs else 2800.0
+    detected_salary = salary_txs[0]["amount"] if salary_txs else 0.0
 
     return {
         "doc_type": "bank_statement",
+        "bank": bank,
+        "account_digits": detect_account_digits(text),
+        "holder": holder,
         "account_name": account_name,
         "card_companion_name": card_companion_name,
-        "final_balance": latest_balance if latest_balance is not None else 18.0,
+        "final_balance": latest_balance,
         "latest_balance_date": latest_balance_date,
         "detected_salary": detected_salary,
         "transactions": transactions,
@@ -659,6 +695,8 @@ def sync_financial_documents_to_db(
     db.commit()
 
     created_records = 0
+    linked_records = 0
+    skipped_records = 0
     updated_accounts = 0
     installments_registered = 0
 
@@ -673,7 +711,12 @@ def sync_financial_documents_to_db(
             if doc.category == "geral":
                 doc.category = "financas"
 
-            c_name = card_parsed["card_name"]
+            from app.services.statement_import import detect_bank, fingerprint, import_record, resolve_card_account
+
+            card_bank = detect_bank(full_text, doc.filename)
+            fallback = card_parsed["card_name"] if not card_parsed["card_name"].startswith("Cartão de Crédito (") else None
+            c_name, _ = resolve_card_account(db, card_bank, fallback)
+            card_parsed["card_name"] = c_name
             acc = db.query(FinanceAccount).filter(FinanceAccount.name == c_name).first()
             if not acc:
                 acc = FinanceAccount(
@@ -697,21 +740,23 @@ def sync_financial_documents_to_db(
             # Registra a fatura fechada do mês atual (ex: Outubro/2026 - R$ 606,74)
             stmt_month_label = _format_month_label(card_parsed["statement_month_key"])
             if card_parsed["statement_total"] > 0:
-                if _ensure_record(
-                    db=db,
-                    title=f"Fatura {c_name} ({stmt_month_label} - {len(card_parsed['items'])} compras)",
-                    category="cartao",
-                    record_type="card_bill",
+                # Uma fatura por cartão e mês, mesmo enviando o PDF de novo
+                if import_record(
+                    db,
+                    fingerprint("fatura", c_name, card_parsed["statement_month_key"]),
+                    title=f"Fatura {c_name} ({stmt_month_label})",
                     amount=card_parsed["statement_total"],
+                    date_iso=card_parsed["due_date_iso"],
+                    record_type="card_bill",
+                    category="cartao",
                     account_name=c_name,
-                    due_date=card_parsed["due_date_iso"],
                     status="paid" if card_parsed["is_paid"] else "pending",
                     notes=(
-                        f"Fatura de {stmt_month_label} extraída de {doc.filename}. "
-                        f"Total de consumos: R$ {card_parsed['statement_total']:.2f} "
-                        f"({'Paga em 09/10/2026' if card_parsed['is_paid'] else 'Pendente'})."
+                        f"Fatura de {stmt_month_label} extraída de {doc.filename}: "
+                        f"{len(card_parsed['items'])} compras, total R$ {card_parsed['statement_total']:.2f}."
                     ),
-                ):
+                    match_types=("card_bill", "expense"),
+                ) == "created":
                     created_records += 1
 
             # Registra cada compra parcelada e gera as parcelas dos próximos meses!
@@ -733,17 +778,19 @@ def sync_financial_documents_to_db(
                         f"• Parcela {curr_n}/{tot_n} paga em {stmt_month_label} • Vencimento em {future_month_label} "
                         f"• Extraído de {doc.filename}"
                     )
-                    if _ensure_record(
-                        db=db,
+                    # Parcelas futuras: a fatura do mês seguinte traz a mesma compra, sem duplicar
+                    if import_record(
+                        db,
+                        fingerprint("parcela", c_name, inst["clean_title"], f"{amt:.2f}", next_inst_num, tot_n),
                         title=rec_title,
-                        category="parcelado",
-                        record_type="card_bill",
                         amount=amt,
+                        date_iso=future_due_date,
+                        record_type="card_bill",
+                        category="parcelado",
                         account_name=c_name,
-                        due_date=future_due_date,
                         status="pending",
                         notes=rec_notes,
-                    ):
+                    ) == "created":
                         created_records += 1
                         installments_registered += 1
 
@@ -772,329 +819,122 @@ def sync_financial_documents_to_db(
                     created_records += 1
             continue
 
-        # 2. Verifica se é Extrato de Conta Bancária (ex: PicPay)
+        # 2. Extrato de conta bancária (qualquer banco): mesma conta e sem duplicar lançamentos
         bank_parsed = _parse_bank_extrato_doc(full_text, doc.filename, doc.id)
         if bank_parsed:
+            from app.services.statement_import import (
+                fingerprint,
+                import_record,
+                resolve_card_account,
+                resolve_checking_account,
+                update_balance_if_newer,
+            )
+
             if doc.category == "geral":
                 doc.category = "financas"
 
-            acc_name = bank_parsed["account_name"]
+            acc_name, existed = resolve_checking_account(db, bank_parsed["bank"])
             acc = db.query(FinanceAccount).filter(FinanceAccount.name == acc_name).first()
             if not acc:
-                acc = FinanceAccount(
-                    name=acc_name,
-                    account_type="checking",
-                    balance=bank_parsed["final_balance"],
-                    credit_limit=0.0,
-                )
+                acc = FinanceAccount(name=acc_name, account_type="checking", balance=0.0, credit_limit=0.0)
                 db.add(acc)
+                db.flush()
                 updated_accounts += 1
-            elif force_account_update:
-                acc.balance = bank_parsed["final_balance"]
-                updated_accounts += 1
+            if update_balance_if_newer(db, acc, bank_parsed["final_balance"], bank_parsed["latest_balance_date"]):
+                updated_accounts += 1 if existed else 0
 
-            # Salva ou atualiza o Salário Mensal na Memória Core se detectado
-            sal_fact = db.query(MemoryFact).filter(MemoryFact.key == "Salário Mensal").first()
-            if not sal_fact and bank_parsed["detected_salary"] > 0:
+            card_name, _ = resolve_card_account(db, bank_parsed["bank"], bank_parsed["card_companion_name"])
+            monthly_salary = _get_monthly_salary(db, db.query(FinanceRecord).all())
+            account_key = f"{bank_parsed['bank'] or acc_name}:{bank_parsed['account_digits'] or ''}"
+
+            for t in bank_parsed["transactions"]:
+                if t["is_self_transfer"] or t["is_pass_through"]:
+                    continue
+                ext_id = fingerprint("extrato", account_key, t["date_iso"], t["time"], t["direction"], f"{t['amount']:.2f}", t["title"][:40])
+                note = f"{t['tx_type']} em {t['date_br']}" + (f" às {t['time']}" if t["time"] else "") + f" • Extrato {doc.filename}"
+
+                if t["direction"] == "in":
+                    is_salary = t["is_salary"] or (monthly_salary > 0 and abs(t["amount"] - monthly_salary) < 0.01)
+                    result = import_record(
+                        db,
+                        ext_id,
+                        title=("Salário" if is_salary else f"Recebido: {t['title']}"),
+                        amount=t["amount"],
+                        date_iso=t["date_iso"],
+                        record_type="income",
+                        category="salario" if is_salary else "outros",
+                        account_name=acc_name,
+                        status="paid",
+                        notes=note,
+                    )
+                else:
+                    desc_low = t["title"].lower()
+                    is_bill_payment = "fatura" in desc_low and ("pagamento" in t["tx_type"].lower() or "pagamento" in desc_low)
+                    if is_bill_payment:
+                        # Pagamento de fatura: marca como paga a fatura já registrada (se houver), sem criar outro gasto
+                        lo = _add_months(t["date_iso"], -1)
+                        hi = _add_months(t["date_iso"], 1)
+                        bill = (
+                            db.query(FinanceRecord)
+                            .filter(
+                                FinanceRecord.record_type == "card_bill",
+                                FinanceRecord.category == "cartao",
+                                FinanceRecord.amount.between(t["amount"] - 0.01, t["amount"] + 0.01),
+                                FinanceRecord.due_date >= lo,
+                                FinanceRecord.due_date <= hi,
+                            )
+                            .order_by(FinanceRecord.status.desc())  # "pending" antes de "paid"
+                            .first()
+                        )
+                        if bill:
+                            bill.status = "paid"
+                            linked_records += 1
+                            continue
+                        result = import_record(
+                            db, ext_id, title=f"Pagamento de fatura: {t['title']}", amount=t["amount"],
+                            date_iso=t["date_iso"], record_type="card_bill", category="cartao",
+                            account_name=acc_name, status="paid", notes=note, match_types=("card_bill", "expense"),
+                        )
+                    elif "Cartão" in t["payment_method"]:
+                        # Pago com o cartão de crédito: entra como gasto no cartão (vem na próxima fatura)
+                        result = import_record(
+                            db, ext_id, title=t["title"], amount=t["amount"], date_iso=t["date_iso"],
+                            record_type="card_bill", category=t["category"], account_name=card_name,
+                            status="pending", notes=f"{note} • {t['payment_method']}", match_types=("card_bill", "expense"),
+                        )
+                    else:
+                        result = import_record(
+                            db, ext_id, title=t["title"], amount=t["amount"], date_iso=t["date_iso"],
+                            record_type="expense", category=t["category"], account_name=acc_name,
+                            status="paid", notes=note, match_types=("expense", "card_bill"),
+                        )
+                if result == "created":
+                    created_records += 1
+                elif result == "linked":
+                    linked_records += 1
+                else:
+                    skipped_records += 1
+
+            # Salário detectado no extrato vira referência se ainda não houver um
+            if bank_parsed["detected_salary"] > 0 and not db.query(MemoryFact).filter(MemoryFact.key == "Salário Mensal").first():
                 db.add(
                     MemoryFact(
                         category="financas",
                         key="Salário Mensal",
-                        content=f"O salário mensal de Weuller é de R$ {bank_parsed['detected_salary']:.2f} (recebido via INF SERVICES LTDA no início do mês).",
+                        content=f"Salário mensal de R$ {bank_parsed['detected_salary']:.2f} (detectado no extrato {acc_name}).",
                         importance=5,
                         source="agent_auto",
                         pinned=True,
                     )
                 )
 
-            txs = bank_parsed["transactions"]
-            oct_txs = [t for t in txs if t["date_iso"].startswith("2026-10")]
-
-            # Receitas de Outubro
-            for t in oct_txs:
-                if t["direction"] == "in" and t["is_salary"]:
-                    _ensure_record(
-                        db=db,
-                        title="Salário Mensal (INF SERVICES LTDA)",
-                        category="salario",
-                        record_type="income",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=f"Pix recebido em {t['date_br']} às {t['time']} • Extraído de {doc.filename}",
-                    )
-
-            other_oct_in = round(
-                sum(
-                    t["amount"]
-                    for t in oct_txs
-                    if t["direction"] == "in"
-                    and not t["is_salary"]
-                    and not t["is_self_transfer"]
-                    and not t["is_pass_through"]
-                ),
-                2,
-            )
-            if other_oct_in > 0:
-                _ensure_record(
-                    db=db,
-                    title="Outras Entradas Pix em Outubro (Divina, Nexus, Ana Beatriz, Pedro)",
-                    category="outros",
-                    record_type="income",
-                    amount=other_oct_in,
-                    account_name=acc_name,
-                    due_date="2026-10-16",
-                    status="paid",
-                    notes="Soma de Pix recebidos de terceiros em Outubro/2026 no extrato PicPay",
-                )
-
-            # Despesas pagas em Outubro via Conta PicPay e compras no Cartão PicPay Card
-            card_next_month_accum = 0.0
-
-            for t in oct_txs:
-                if t["direction"] != "out" or t["is_self_transfer"] or t["is_pass_through"]:
-                    continue
-
-                desc_low = t["title"].lower()
-                if "fatura picpay card" in desc_low:
-                    _ensure_record(
-                        db=db,
-                        title="Fatura PicPay Card (Outubro/2026)",
-                        category="cartao",
-                        record_type="card_bill",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=f"Pagamento realizado com saldo em {t['date_br']} às {t['time']}",
-                    )
-                elif "cemig" in desc_low:
-                    _ensure_record(
-                        db=db,
-                        title="Conta de Energia - CEMIG/MG (Outubro/2026)",
-                        category="moradia",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=f"Pagamento realizado com saldo em {t['date_br']} às {t['time']}",
-                    )
-                    # Registra previsão da CEMIG para o próximo mês (Novembro/2026)
-                    _ensure_record(
-                        db=db,
-                        title="Conta de Energia - CEMIG/MG (Previsão Nov/2026)",
-                        category="moradia",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=_add_months(t["date_iso"], 1),
-                        status="pending",
-                        notes="[CONTA FIXA MENSAL] Previsão baseada nas contas de Set/2026 (R$ 181,29) e Out/2026 (R$ 201,42)",
-                    )
-                elif "editora e distribuidora" in desc_low:
-                    # Em 07/10 o saldo antes do pagamento era R$ 282,40 e o boleto foi R$ 395,13 (Saldo + Cartão)
-                    saldo_part = 282.40 if t["payment_method"] == "Saldo + Cartão" and t["amount"] == 395.13 else t["amount"]
-                    card_part = round(t["amount"] - saldo_part, 2)
-                    _ensure_record(
-                        db=db,
-                        title="Faculdade - Editora e Distribuidora Educacional S/A (Out/2026)",
-                        category="faculdade",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=(
-                            f"Boleto da faculdade pago em {t['date_br']} (R$ {saldo_part:.2f} via saldo PicPay "
-                            f"+ R$ {card_part:.2f} financiado no PicPay Card)"
-                        ),
-                    )
-                    if card_part > 0:
-                        card_next_month_accum += card_part
-                        _ensure_record(
-                            db=db,
-                            title="Faculdade Editora Educacional (Parte no PicPay Card p/ Nov/2026)",
-                            category="faculdade",
-                            record_type="card_bill",
-                            amount=card_part,
-                            account_name=bank_parsed["card_companion_name"],
-                            due_date="2026-11-06",
-                            status="pending",
-                            notes=(
-                                f"[FATURA PRÓXIMO MÊS] Parte do pagamento de 07/10 (Total R$ {t['amount']:.2f} "
-                                f"- R$ {saldo_part:.2f} do saldo = R$ {card_part:.2f} no cartão) para a fatura de Novembro/2026"
-                            ),
-                        )
-                    # Registra mensalidade da faculdade prevista para Novembro/2026
-                    _ensure_record(
-                        db=db,
-                        title="Faculdade - Editora Educacional S/A (Mensalidade Nov/2026)",
-                        category="faculdade",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=_add_months(t["date_iso"], 1),
-                        status="pending",
-                        notes="[CONTA FIXA MENSAL] Previsão baseada nos pagamentos de Set/2026 (R$ 387,68) e Out/2026 (R$ 395,13)",
-                    )
-                elif "ifood" in desc_low and "Cartão" in t["payment_method"]:
-                    card_next_month_accum += t["amount"]
-                    _ensure_record(
-                        db=db,
-                        title="iFood.com Restaurantes (Compra no PicPay Card em 07/10)",
-                        category="alimentacao",
-                        record_type="card_bill",
-                        amount=t["amount"],
-                        account_name=bank_parsed["card_companion_name"],
-                        due_date="2026-11-06",
-                        status="pending",
-                        notes=f"[FATURA PRÓXIMO MÊS] Pix com Cartão PicPay em {t['date_br']} às {t['time']} • Vem na fatura de Novembro/2026",
-                    )
-                elif "rfa multisservicos" in desc_low and "Cartão" in t["payment_method"]:
-                    card_next_month_accum += t["amount"]
-                    _ensure_record(
-                        db=db,
-                        title="RFA Multisserviços e Papelaria (Compra no PicPay Card em 07/10)",
-                        category="faculdade",
-                        record_type="card_bill",
-                        amount=t["amount"],
-                        account_name=bank_parsed["card_companion_name"],
-                        due_date="2026-11-06",
-                        status="pending",
-                        notes=f"[FATURA PRÓXIMO MÊS] Pix Saldo+Cartão em {t['date_br']} às {t['time']} • Vem na fatura de Novembro/2026",
-                    )
-                elif "netflix" in desc_low:
-                    _ensure_record(
-                        db=db,
-                        title="Netflix Entretenimento (Outubro/2026)",
-                        category="assinaturas & lazer",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=f"Compra no saldo em {t['date_br']} às {t['time']}",
-                    )
-                    _ensure_record(
-                        db=db,
-                        title="Netflix Entretenimento (Assinatura Nov/2026)",
-                        category="assinaturas & lazer",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=_add_months(t["date_iso"], 1),
-                        status="pending",
-                        notes="[RECORRENTE MENSAL] Assinatura mensal Netflix",
-                    )
-                elif "mercearia lidiane" in desc_low:
-                    _ensure_record(
-                        db=db,
-                        title="Mercearia Lidiane Ltda",
-                        category="alimentacao",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=f"Pix enviado em {t['date_br']} às {t['time']}",
-                    )
-                elif "jheyce kele" in desc_low:
-                    _ensure_record(
-                        db=db,
-                        title="Pix Enviado - Jheyce Kele Ramos Nascimento",
-                        category="outros",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=f"Pix enviado em {t['date_br']} às {t['time']}",
-                    )
-                elif "elizabeth vieira" in desc_low:
-                    _ensure_record(
-                        db=db,
-                        title="Pix Enviado - Elizabeth Vieira Gomes",
-                        category="pessoal",
-                        record_type="expense",
-                        amount=t["amount"],
-                        account_name=acc_name,
-                        due_date=t["date_iso"],
-                        status="paid",
-                        notes=f"Pix enviado em {t['date_br']} às {t['time']}",
-                    )
-
-            # Agrupa os Pix para Ana Beatriz em Outubro (R$ 160 + R$ 92 = R$ 252)
-            ana_oct = round(
-                sum(
-                    t["amount"]
-                    for t in oct_txs
-                    if t["direction"] == "out" and "ana beatriz" in t["title"].lower()
-                ),
-                2,
-            )
-            if ana_oct > 0:
-                _ensure_record(
-                    db=db,
-                    title="Pix Enviados - Ana Beatriz Sabino Menezes (06/10 e 07/10)",
-                    category="pessoal",
-                    record_type="expense",
-                    amount=ana_oct,
-                    account_name=acc_name,
-                    due_date="2026-10-07",
-                    status="paid",
-                    notes="Pix enviados: R$ 160,00 em 06/10 + R$ 92,00 em 07/10",
-                )
-
-            # Agrupa os 5 micro-envios Pix de R$ 10,00 (04/10 e 05/10)
-            micro_oct = round(
-                sum(
-                    t["amount"]
-                    for t in oct_txs
-                    if t["direction"] == "out" and t["amount"] == 10.0 and not t["is_self_transfer"]
-                ),
-                2,
-            )
-            if micro_oct > 0:
-                _ensure_record(
-                    db=db,
-                    title="Micro-pagamentos Pix (JMV, Max, Paystrata, Swapx, ECC)",
-                    category="outros",
-                    record_type="expense",
-                    amount=micro_oct,
-                    account_name=acc_name,
-                    due_date="2026-10-05",
-                    status="paid",
-                    notes="5 envios Pix de R$ 10,00 realizados entre 04/10 e 05/10",
-                )
-
-            # Cria/atualiza o cartão PicPay Card com o acumulado para a próxima fatura
-            if card_next_month_accum > 0:
-                pp_card = (
-                    db.query(FinanceAccount)
-                    .filter(FinanceAccount.name == bank_parsed["card_companion_name"])
-                    .first()
-                )
-                if not pp_card:
-                    pp_card = FinanceAccount(
-                        name=bank_parsed["card_companion_name"],
-                        account_type="credit_card",
-                        balance=round(card_next_month_accum, 2),
-                        credit_limit=1000.0,
-                        closing_day=1,
-                        due_day=6,
-                    )
-                    db.add(pp_card)
-                    updated_accounts += 1
-                elif force_account_update:
-                    pp_card.balance = round(card_next_month_accum, 2)
-
     db.commit()
     return {
         "synced": True,
         "updated_accounts": updated_accounts,
         "created_records": created_records,
+        "linked_records": linked_records,
+        "skipped_records": skipped_records,
         "installments_registered": installments_registered,
     }
 
@@ -1802,6 +1642,9 @@ def delete_record(record_id: int, db: Session = Depends(get_db)):
     rec = db.query(FinanceRecord).filter(FinanceRecord.id == record_id).first()
     if not rec:
         raise HTTPException(status_code=404, detail="Lançamento não encontrado")
+    from app.services.statement_import import remember_deleted
+
+    remember_deleted(db, rec.external_id)  # não reimportar ao reenviar o extrato
     db.delete(rec)
     db.commit()
     return {"status": "deleted", "id": record_id}

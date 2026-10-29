@@ -205,12 +205,16 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
     setUploadingFatura(true);
     setFeedbackBanner(null);
     try {
-      // O upload já importa os lançamentos deste arquivo
-      await api.uploadDocument(file, "financas");
+      // O upload já importa os lançamentos deste arquivo (sem duplicar o que já existe)
+      const res = await api.uploadDocument(file, "financas");
       await onRefresh();
-      setFeedbackBanner(
-        `✅ Fatura/Extrato "${file.name}" processado! Saldo atual, gastos do mês, compras parceladas e previsão dos próximos meses foram atualizados automaticamente.`
-      );
+      const sync = res?.finance_sync ?? {};
+      const parts = [
+        `${sync.created_records ?? 0} lançamento(s) novo(s)`,
+        sync.linked_records ? `${sync.linked_records} ligado(s) ao que você já tinha lançado` : "",
+        sync.skipped_records ? `${sync.skipped_records} ignorado(s) por já existirem` : "",
+      ].filter(Boolean);
+      setFeedbackBanner(`✅ "${file.name}" processado: ${parts.join(", ")}.`);
     } catch (err: any) {
       setFeedbackBanner(`❌ Erro ao processar fatura: ${err.message || err}`);
     } finally {

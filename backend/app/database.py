@@ -35,6 +35,7 @@ NEW_COLUMNS = [
     ("schedule_notifications", "reminder_offsets", "JSON"),
     ("workout_exercises", "image_urls", "JSON"),
     ("workout_exercises", "youtube_url", "VARCHAR(300)"),
+    ("finance_records", "external_id", "VARCHAR(64)"),
     ("conversations", "agent_id", "INTEGER"),
 ]
 
