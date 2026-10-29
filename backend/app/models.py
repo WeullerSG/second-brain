@@ -187,6 +187,7 @@ class Conversation(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(160), nullable=False, default="Nova conversa")
     model = Column(String(80), nullable=True)
+    agent_id = Column(Integer, ForeignKey("agent_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     last_interaction_id = Column(String(160), nullable=True)  # continua o contexto no Gemini
     created_at = Column(DateTime, default=utcnow)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
@@ -210,6 +211,99 @@ class ConversationMessage(Base):
     created_at = Column(DateTime, default=utcnow)
 
     conversation = relationship("Conversation", back_populates="messages")
+
+
+class AgentProfile(Base):
+    """
+    Perfis de Agentes IA gerenciáveis pelo usuário (Orquestrador, Personal Trainer / SmartWorkout Coach,
+    Consultor Financeiro, Tutor Acadêmico e agentes customizados).
+    """
+    __tablename__ = "agent_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String(80), unique=True, index=True, nullable=False)
+    name = Column(String(120), nullable=False)
+    role = Column(String(160), nullable=False)
+    description = Column(Text, nullable=False)
+    category = Column(String(50), index=True, default="geral")  # treino | geral | financas | faculdade | personalizado
+    avatar_icon = Column(String(40), default="bot")  # dumbbell | brain | wallet | graduation | bot | flame | sparkles
+    accent_color = Column(String(32), default="#3454d1")
+    model = Column(String(80), nullable=True)  # Se vazio/null, usa o modelo padrão do sistema
+    system_prompt = Column(Text, nullable=False)
+    tools_enabled = Column(JSON, default=list)  # Lista de nomes das tools habilitadas
+    quick_prompts = Column(JSON, default=list)  # Sugestões de comandos rápidos para este agente
+    is_default = Column(Boolean, default=False)
+    is_system = Column(Boolean, default=False)
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class WorkoutExercise(Base):
+    """
+    Biblioteca de Exercícios inspirada no SmartWorkout (https://smartworkout.app/pt/biblioteca-de-exercicios).
+    Catalogado por grupo muscular, equipamento, mecânica e instruções de execução.
+    """
+    __tablename__ = "workout_exercises"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String(120), unique=True, index=True, nullable=False)
+    name = Column(String(160), nullable=False, index=True)
+    muscle_group = Column(String(60), index=True, nullable=False)  # Peito, Costas, Pernas, Glúteos, Ombros, Bíceps, Tríceps, Antebraço, Abdômen, Cardio
+    secondary_muscles = Column(String(160), nullable=True)
+    equipment = Column(String(60), index=True, nullable=False)  # Barra, Halteres, Máquina, Polia / Cabo, Peso Corporal, Smith, Kettlebell, Barra W
+    difficulty = Column(String(32), default="Intermediário")  # Iniciante | Intermediário | Avançado
+    mechanic = Column(String(32), default="Composto")  # Composto | Isolado
+    instructions = Column(Text, nullable=False)
+    common_mistakes = Column(Text, nullable=True)
+    video_url = Column(String(300), nullable=True)
+    is_custom = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class WorkoutPlan(Base):
+    """
+    Fichas / Rotinas de Treino (criadas pelo Agente de Treinos ou pelo Usuário).
+    """
+    __tablename__ = "workout_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(160), nullable=False)
+    split_label = Column(String(60), default="ABC")  # ABC | ABCD | Push/Pull/Legs | Upper/Lower | Full Body
+    target_muscles = Column(String(160), nullable=False)
+    goal = Column(String(80), default="Hipertrofia")  # Hipertrofia | Força | Definição | Condicionamento
+    scheduled_days = Column(String(80), nullable=True)  # Ex: "Seg, Qui" ou "mon,thu"
+    estimated_duration_min = Column(Integer, default=60)
+    created_by_agent = Column(String(120), default="SmartWorkout Coach IA")
+    notes = Column(Text, nullable=True)
+    exercises = Column(JSON, default=list)  # Lista de exercícios prescritos com séries, reps, carga alvo, descanso, RIR
+    active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class WorkoutSession(Base):
+    """
+    Diário de Treinos Realizados: registra os dias em que o usuário treinou,
+    quantos exercícios fez, séries, repetições e as cargas (kg) que pegou.
+    """
+    __tablename__ = "workout_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_date = Column(String(32), index=True, nullable=False)  # YYYY-MM-DD
+    title = Column(String(160), nullable=False)
+    plan_id = Column(Integer, ForeignKey("workout_plans.id", ondelete="SET NULL"), nullable=True, index=True)
+    muscle_groups = Column(String(160), nullable=True)
+    duration_minutes = Column(Integer, default=60)
+    perceived_effort = Column(Integer, default=8)  # RPE 1..10
+    exercises_count = Column(Integer, default=0)
+    total_sets = Column(Integer, default=0)
+    total_reps = Column(Integer, default=0)
+    total_volume_kg = Column(Float, default=0.0)
+    max_weight_kg = Column(Float, default=0.0)
+    exercises_performed = Column(JSON, default=list)  # Lista detalhada de exercícios e cargas de cada série
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
 
 
 class AppSetting(Base):

@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   Bell,
   BookOpen,
+  Bot,
   Brain,
   Calendar,
   CheckCircle2,
@@ -13,6 +14,7 @@ import {
   CreditCard,
   Database,
   Download,
+  Dumbbell,
   Edit3,
   FileText,
   GraduationCap,
@@ -38,12 +40,16 @@ import {
 import { api } from "./api";
 import { formatReminderOffset, getDueReminders } from "./reminders";
 import { AgendaNotificationsView } from "./components/AgendaNotificationsView";
+import { AgentsSection, renderAgentIcon } from "./components/AgentsSection";
 import { CurrentFinancesSection } from "./components/CurrentFinancesSection";
 import { MemoryDonutChart, PaymentAndUsageChart } from "./components/DuraluxCharts";
 import { StatementHistorySection } from "./components/StatementHistorySection";
+import { WorkoutsSection } from "./components/WorkoutsSection";
 import { Markdown } from "./components/Markdown";
 import type {
   AcademicTask,
+  AgentProfile,
+  AgentToolMeta,
   ConversationDetail,
   ConversationSummary,
   DocumentChunkItem,
@@ -55,11 +61,15 @@ import type {
   StatementHistoryResponse,
   TelemetryOverview,
   ToolCallTrace,
+  WorkoutExercise,
+  WorkoutsSummary,
 } from "./types";
 
 type ActiveTab =
   | "overview"
   | "chat"
+  | "workouts"
+  | "agents"
   | "agenda"
   | "finances"
   | "academic"
@@ -158,6 +168,17 @@ export default function App({ username, onLogout }: { username: string; onLogout
   const [telemetry, setTelemetry] = useState<TelemetryOverview | null>(null);
   const [ftExamples, setFtExamples] = useState<FineTuneExample[]>([]);
   const [schedules, setSchedules] = useState<ScheduleNotificationItem[]>([]);
+  const [workoutsSummary, setWorkoutsSummary] =
+    useState<WorkoutsSummary | null>(null);
+  const [workoutExercises, setWorkoutExercises] = useState<WorkoutExercise[]>(
+    []
+  );
+  const [agents, setAgents] = useState<AgentProfile[]>([]);
+  const [agentTools, setAgentTools] = useState<AgentToolMeta[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
+  const [workoutInitialSubTab, setWorkoutInitialSubTab] = useState<
+    "diary" | "plans" | "library"
+  >("diary");
   const [permissionStatus, setPermissionStatus] = useState<
     NotificationPermission | "unsupported"
   >(
@@ -218,6 +239,10 @@ export default function App({ username, onLogout }: { username: string; onLogout
         telData,
         ftData,
         schedData,
+        workoutSumData,
+        workoutExData,
+        agentsData,
+        toolsData,
       ] = await Promise.all([
         api.getFinanceSummary(),
         api.getStatementHistory(),
@@ -227,6 +252,10 @@ export default function App({ username, onLogout }: { username: string; onLogout
         api.getTelemetryOverview(),
         api.getFineTuneExamples(),
         api.getNotifications(),
+        api.getWorkoutsSummary(),
+        api.getWorkoutExercises(),
+        api.getAgents(),
+        api.getAgentTools(),
       ]);
       setFinance(finData);
       setStatementHistory(stmtData);
@@ -236,6 +265,15 @@ export default function App({ username, onLogout }: { username: string; onLogout
       setTelemetry(telData);
       setFtExamples(ftData);
       setSchedules(schedData);
+      setWorkoutsSummary(workoutSumData);
+      setWorkoutExercises(workoutExData);
+      setAgents(agentsData);
+      setAgentTools(toolsData);
+      setSelectedAgentId((prev) => {
+        if (prev && agentsData.some((a) => a.id === prev)) return prev;
+        const def = agentsData.find((a) => a.is_default) || agentsData[0];
+        return def ? def.id : null;
+      });
     } catch (err) {
       console.error("Erro ao sincronizar dados com backend:", err);
     }
@@ -417,9 +455,15 @@ export default function App({ username, onLogout }: { username: string; onLogout
     }
   };
 
-  const handleSendMessage = async (customPrompt?: string) => {
+  const handleSendMessage = async (
+    customPrompt?: string,
+    agentIdOverride?: number | null
+  ) => {
     const promptText = (customPrompt ?? chatInput).trim();
     if (!promptText || loading) return;
+
+    const effectiveAgentId =
+      agentIdOverride !== undefined ? agentIdOverride : selectedAgentId;
 
     const userMsg: ChatMessage = {
       id: `u_${Date.now()}`,
@@ -436,6 +480,7 @@ export default function App({ username, onLogout }: { username: string; onLogout
         conversation_id: activeConversationId,
         model: selectedModel,
         save_for_finetune: saveForFinetune,
+        agent_id: effectiveAgentId,
       });
       if (res.conversation_id) {
         setActiveConversationId(res.conversation_id);
@@ -594,6 +639,14 @@ export default function App({ username, onLogout }: { username: string; onLogout
   const tabTitles: Record<ActiveTab, { title: string; section: string }> = {
     overview: { title: "Dashboard Geral", section: "Visão Geral CRM & Vida" },
     chat: { title: "Agente Gemini AI", section: "Assistente Conversacional" },
+    workouts: {
+      title: "Treinos & Academia (SmartWorkout)",
+      section: "Diário de Treinos, Cargas, Fichas IA & Biblioteca de Exercícios",
+    },
+    agents: {
+      title: "Central de Agentes IA",
+      section: "Gerenciamento de Agentes, Prompts & Ferramentas (Tools)",
+    },
     agenda: {
       title: "Agenda & Notificações",
       section: "Grade de Aulas, Entrevistas & Alertas Push",
@@ -683,6 +736,8 @@ export default function App({ username, onLogout }: { username: string; onLogout
                 {[
                   { id: "overview", label: "Visão Geral (Dashboard)", icon: LayoutDashboard },
                   { id: "chat", label: "Agente Gemini AI", icon: MessageSquare },
+                  { id: "workouts", label: "Treinos & Academia (SmartWorkout)", icon: Dumbbell },
+                  { id: "agents", label: "Gerenciar Agentes IA", icon: Bot },
                   { id: "agenda", label: "Agenda & Notificações", icon: Calendar },
                   { id: "finances", label: "Finanças & Cartões", icon: Wallet },
                   { id: "academic", label: "Faculdade & Prazos", icon: GraduationCap },
@@ -792,6 +847,13 @@ export default function App({ username, onLogout }: { username: string; onLogout
                 group: "GESTÃO DO DIA A DIA",
                 items: [
                   {
+                    id: "workouts",
+                    label: "Treinos & Academia",
+                    icon: Dumbbell,
+                    badge: workoutsSummary ? `${workoutsSummary.days_trained_total}d` : "IA",
+                    badgeColor: "bg-[#17c666]/15 text-[#17c666]",
+                  },
+                  {
                     id: "agenda",
                     label: "Agenda & Notificações",
                     icon: Calendar,
@@ -817,6 +879,13 @@ export default function App({ username, onLogout }: { username: string; onLogout
               {
                 group: "INTELIGÊNCIA & DADOS",
                 items: [
+                  {
+                    id: "agents",
+                    label: "Agentes IA",
+                    icon: Bot,
+                    badge: `${agents.filter((a) => a.enabled).length}`,
+                    badgeColor: "bg-[#3454d1]/15 text-[#3454d1]",
+                  },
                   {
                     id: "memory",
                     label: "Memória & RAG",
@@ -1592,13 +1661,15 @@ export default function App({ username, onLogout }: { username: string; onLogout
           <div className="p-3 sm:p-4 md:p-6 max-w-[1440px] w-full mx-auto flex flex-col lg:flex-row gap-3 lg:gap-6 h-[calc(100dvh-201px)] md:h-auto md:flex-1">
             {/* Barra Horizontal de Comandos Rápidos no Mobile (< lg) */}
             <div className="lg:hidden shrink-0 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
-              {[
-                "Qual o valor do meu salário?",
-                "Quanto vai sobrar do meu salário?",
-                "O que tem parcelado nas faturas?",
-                "Gastei R$ 64,90 no iFood hoje",
-                "Resumo completo das contas e faculdade",
-              ].map((prompt) => (
+              {(
+                agents.find((a) => a.id === selectedAgentId)?.quick_prompts ?? [
+                  "Qual o valor do meu salário?",
+                  "Monte um treino ABC de hipertrofia para mim",
+                  "Anote meu treino de hoje: Supino Reto 4x10 com 80kg",
+                  "Gastei R$ 64,90 no iFood hoje",
+                  "Resumo completo das contas, treinos e faculdade",
+                ]
+              ).map((prompt) => (
                 <button
                   key={prompt}
                   onClick={() => handleSendMessage(prompt)}
@@ -1638,6 +1709,52 @@ export default function App({ username, onLogout }: { username: string; onLogout
 
             {/* Painel Lateral Esquerdo Estilo Duralux Chat Sidebar (Desktop >= lg) */}
             <div className={`hidden lg:block lg:w-80 shrink-0 duralux-card rounded-xl border p-5 space-y-5 ${cardSurface}`}>
+              {/* Seletor de Agente Especialista */}
+              <div className="space-y-2 pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    Agente Ativo
+                  </span>
+                  <button
+                    onClick={() => setActiveTab("agents")}
+                    className="text-[11px] font-bold text-[#3454d1] hover:underline flex items-center gap-1"
+                  >
+                    <Bot className="w-3 h-3" /> Gerenciar Agentes
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {agents
+                    .filter((a) => a.enabled)
+                    .map((ag) => {
+                      const isSel = ag.id === selectedAgentId;
+                      return (
+                        <button
+                          key={ag.id}
+                          onClick={() => setSelectedAgentId(ag.id)}
+                          className={`w-full flex items-center gap-2.5 p-2 rounded-lg border text-left text-xs transition-all ${
+                            isSel
+                              ? "border-[#3454d1] bg-[#3454d1]/10"
+                              : "border-transparent hover:border-slate-300 dark:hover:border-slate-700"
+                          }`}
+                        >
+                          <div
+                            className="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0"
+                            style={{ backgroundColor: ag.color || "#3454d1" }}
+                          >
+                            {renderAgentIcon(ag.icon, "w-3.5 h-3.5")}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold truncate">{ag.name}</div>
+                            <div className="text-[10px] text-slate-400 truncate">
+                              {ag.role}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-bold text-sm flex items-center gap-2">
@@ -1657,21 +1774,23 @@ export default function App({ username, onLogout }: { username: string; onLogout
               <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
                 <h3 className="font-bold text-sm flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-[#3454d1]" />
-                  Comandos Rápidos do Dia a Dia
+                  Comandos Rápidos do Agente
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Clique para testar o Function Calling do Gemini
+                  Clique para acionar as tools deste agente
                 </p>
               </div>
 
               <div className="space-y-2">
-                {[
-                  "Gastei R$ 64,90 no iFood pelo cartão Nubank hoje",
-                  "Atualize o saldo da minha conta Itaú para R$ 2.400,00",
-                  "Tenho prova de Inteligência Artificial dia 20/11 valendo 10 pontos",
-                  "Salve na memória que minha fatura Nubank fecha todo dia 3",
-                  "Me dê um resumo completo das minhas contas e faculdade",
-                ].map((prompt) => (
+                {(
+                  agents.find((a) => a.id === selectedAgentId)?.quick_prompts ?? [
+                    "Monte um treino ABC de hipertrofia usando halteres, barra e polia",
+                    "Anote meu treino de hoje: Supino Reto 4x10 com 80kg e Tríceps Polia 4x12 com 35kg",
+                    "Gastei R$ 64,90 no iFood pelo cartão Nubank hoje",
+                    "Tenho prova de Inteligência Artificial dia 20/11 valendo 10 pontos",
+                    "Me dê um resumo completo das minhas contas, treinos e faculdade",
+                  ]
+                ).map((prompt) => (
                   <button
                     key={prompt}
                     onClick={() => handleSendMessage(prompt)}
@@ -1702,23 +1821,56 @@ export default function App({ username, onLogout }: { username: string; onLogout
             {/* Área Principal de Mensagens Duralux Chat */}
             <div className={`flex-1 min-h-0 duralux-card rounded-xl border flex flex-col overflow-hidden ${cardSurface}`}>
               <div
-                className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b flex items-center justify-between gap-2 ${
+                className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b flex flex-wrap items-center justify-between gap-2 ${
                   darkMode ? "border-slate-800" : "border-slate-100"
                 }`}
               >
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#3454d1] text-white flex items-center justify-center font-bold text-xs sm:text-sm shrink-0">
-                    AI
-                  </div>
-                  <div className="min-w-0">
-                    <div className="font-bold text-xs sm:text-sm truncate">
-                      Second Brain Agent ({selectedModel})
+                {(() => {
+                  const activeAg = agents.find((a) => a.id === selectedAgentId);
+                  return (
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+                      <div
+                        className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-white flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 shadow-sm"
+                        style={{ backgroundColor: activeAg?.color || "#3454d1" }}
+                      >
+                        {activeAg ? renderAgentIcon(activeAg.icon, "w-5 h-5") : "AI"}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-bold text-xs sm:text-sm truncate">
+                          {activeAg ? activeAg.name : "Second Brain Agent"} ({selectedModel})
+                        </div>
+                        <div className="text-[10px] sm:text-[11px] text-[#17c666] font-semibold flex items-center gap-1 truncate">
+                          <span className="w-2 h-2 rounded-full bg-[#17c666] shrink-0" />
+                          Online • {activeAg ? activeAg.tools_enabled.length : 14} Tools + Busca Híbrida RAG
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-[10px] sm:text-[11px] text-[#17c666] font-semibold flex items-center gap-1 truncate">
-                      <span className="w-2 h-2 rounded-full bg-[#17c666] shrink-0" />
-                      Online • 8 Tools + Busca Híbrida RAG
-                    </div>
-                  </div>
+                  );
+                })()}
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedAgentId ?? ""}
+                    onChange={(e) =>
+                      setSelectedAgentId(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className={`lg:hidden rounded-lg px-2.5 py-1.5 text-xs font-bold border ${inputSurface}`}
+                  >
+                    {agents
+                      .filter((a) => a.enabled)
+                      .map((a) => (
+                        <option key={a.id} value={a.id}>
+                          🤖 {a.name}
+                        </option>
+                      ))}
+                  </select>
+                  <button
+                    onClick={() => setActiveTab("agents")}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold hover:border-[#3454d1] flex items-center gap-1.5"
+                  >
+                    <Bot className="w-3.5 h-3.5 text-[#3454d1]" />
+                    <span className="hidden sm:inline">Agentes</span>
+                  </button>
                 </div>
               </div>
 
@@ -1986,6 +2138,50 @@ export default function App({ username, onLogout }: { username: string; onLogout
               OK
             </button>
           </div>
+        )}
+
+        {/* ===================================================================
+            VIEW 2.2: TREINOS & ACADEMIA (SMARTWORKOUT)
+        ==================================================================== */}
+        {activeTab === "workouts" && (
+          <WorkoutsSection
+            summary={workoutsSummary}
+            exercises={workoutExercises}
+            darkMode={darkMode}
+            onRefresh={refreshAll}
+            onOpenCoachInChat={(prompt) => {
+              const coachAgent = agents.find((a) => a.slug === "smartworkout-coach");
+              if (coachAgent) setSelectedAgentId(coachAgent.id);
+              setActiveTab("chat");
+              if (prompt) handleSendMessage(prompt, coachAgent?.id);
+            }}
+            onManageAgents={() => setActiveTab("agents")}
+          />
+        )}
+
+        {/* ===================================================================
+            VIEW 2.4: SEÇÃO DE AGENTES IA (GERENCIAMENTO & TOOLS)
+        ==================================================================== */}
+        {activeTab === "agents" && (
+          <AgentsSection
+            agents={agents}
+            availableTools={agentTools}
+            availableModels={
+              availableModels.length > 0
+                ? availableModels
+                : ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
+            }
+            darkMode={darkMode}
+            selectedAgentId={selectedAgentId}
+            onSelectAgentForChat={(agent, initialPrompt) => {
+              setSelectedAgentId(agent.id);
+              setActiveTab("chat");
+              if (initialPrompt) {
+                handleSendMessage(initialPrompt, agent.id);
+              }
+            }}
+            onRefresh={refreshAll}
+          />
         )}
 
         {/* ===================================================================
@@ -2665,11 +2861,11 @@ export default function App({ username, onLogout }: { username: string; onLogout
       >
         {[
           { id: "overview", label: "Home", icon: LayoutDashboard },
-          { id: "chat", label: "Agente", icon: MessageSquare },
-          { id: "agenda", label: "Agenda", icon: Calendar },
+          { id: "chat", label: "Chat IA", icon: MessageSquare },
+          { id: "workouts", label: "Treinos", icon: Dumbbell },
+          { id: "agents", label: "Agentes", icon: Bot },
           { id: "finances", label: "Finanças", icon: Wallet },
-          { id: "academic", label: "Estudos", icon: GraduationCap },
-          { id: "memory", label: "Memória", icon: Database },
+          { id: "agenda", label: "Agenda", icon: Calendar },
         ].map((item) => {
           const Icon = item.icon;
           const active = activeTab === item.id;

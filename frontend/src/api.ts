@@ -1,5 +1,8 @@
 import type {
   AcademicTask,
+  AgentProfile,
+  AgentToolMeta,
+  AIWorkoutGenerateRequest,
   AppSettings,
   ChatResponse,
   ConversationDetail,
@@ -12,6 +15,12 @@ import type {
   ScheduleNotificationItem,
   StatementHistoryResponse,
   TelemetryOverview,
+  WorkoutExercise,
+  WorkoutPlan,
+  WorkoutPlanExerciseItem,
+  WorkoutSession,
+  WorkoutSessionExerciseItem,
+  WorkoutsSummary,
 } from "./types";
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
@@ -108,6 +117,7 @@ export const api = {
     model?: string;
     save_for_finetune?: boolean;
     conversation_id?: number | null;
+    agent_id?: number | null;
   }) =>
     request<ChatResponse>("/chat", {
       method: "POST",
@@ -408,4 +418,131 @@ export const api = {
     }),
   deleteNotification: (id: number) =>
     request(`/notifications/${id}`, { method: "DELETE" }),
+
+  // Gerenciador de Agentes IA
+  getAgents: () => request<AgentProfile[]>("/agents"),
+  getAgentTools: () => request<AgentToolMeta[]>("/agents/tools"),
+  createAgent: (data: {
+    name: string;
+    role: string;
+    description: string;
+    category: string;
+    avatar_icon: string;
+    accent_color: string;
+    model?: string | null;
+    system_prompt: string;
+    tools_enabled: string[];
+    quick_prompts: string[];
+    is_default?: boolean;
+    enabled?: boolean;
+  }) =>
+    request<AgentProfile>("/agents", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateAgent: (id: number, data: Partial<AgentProfile>) =>
+    request<AgentProfile>(`/agents/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteAgent: (id: number) =>
+    request<{ status: string }>(`/agents/${id}`, { method: "DELETE" }),
+  resetDefaultAgents: () =>
+    request<AgentProfile[]>("/agents/reset-defaults", { method: "POST" }),
+
+  // Treinos & Biblioteca SmartWorkout
+  getWorkoutsSummary: () => request<WorkoutsSummary>("/workouts/summary"),
+  getWorkoutExercises: (params?: {
+    muscle_group?: string;
+    equipment?: string;
+    q?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params?.muscle_group && params.muscle_group !== "Todos") {
+      qs.set("muscle_group", params.muscle_group);
+    }
+    if (params?.equipment && params.equipment !== "Todos") {
+      qs.set("equipment", params.equipment);
+    }
+    if (params?.q) qs.set("q", params.q);
+    return request<WorkoutExercise[]>(`/workouts/exercises?${qs.toString()}`);
+  },
+  createWorkoutExercise: (data: {
+    name: string;
+    muscle_group: string;
+    secondary_muscles?: string;
+    equipment: string;
+    difficulty: string;
+    mechanic: string;
+    instructions: string;
+    common_mistakes?: string;
+    video_url?: string;
+  }) =>
+    request<WorkoutExercise>("/workouts/exercises", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  deleteWorkoutExercise: (id: number) =>
+    request<{ status: string }>(`/workouts/exercises/${id}`, {
+      method: "DELETE",
+    }),
+  getWorkoutPlans: () => request<WorkoutPlan[]>("/workouts/plans"),
+  createWorkoutPlan: (data: {
+    title: string;
+    split_label: string;
+    target_muscles: string;
+    goal: string;
+    scheduled_days?: string;
+    estimated_duration_min: number;
+    created_by_agent?: string;
+    notes?: string;
+    exercises: WorkoutPlanExerciseItem[];
+    active?: boolean;
+  }) =>
+    request<WorkoutPlan>("/workouts/plans", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateWorkoutPlan: (id: number, data: Partial<WorkoutPlan>) =>
+    request<WorkoutPlan>(`/workouts/plans/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteWorkoutPlan: (id: number) =>
+    request<{ status: string }>(`/workouts/plans/${id}`, { method: "DELETE" }),
+  getWorkoutSessions: () => request<WorkoutSession[]>("/workouts/sessions"),
+  createWorkoutSession: (data: {
+    session_date: string;
+    title: string;
+    plan_id?: number | null;
+    muscle_groups?: string;
+    duration_minutes: number;
+    perceived_effort: number;
+    exercises_performed: WorkoutSessionExerciseItem[];
+    notes?: string;
+  }) =>
+    request<WorkoutSession>("/workouts/sessions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateWorkoutSession: (id: number, data: Partial<WorkoutSession>) =>
+    request<WorkoutSession>(`/workouts/sessions/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  deleteWorkoutSession: (id: number) =>
+    request<{ status: string }>(`/workouts/sessions/${id}`, {
+      method: "DELETE",
+    }),
+  generateAIWorkoutPlan: (data: AIWorkoutGenerateRequest) =>
+    request<{
+      status: string;
+      agent_name: string;
+      coach_reply: string;
+      created_plans_count: number;
+      created_plans: WorkoutPlan[];
+    }>("/workouts/generate-ai-plan", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

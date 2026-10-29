@@ -8,12 +8,16 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.models import (
     AcademicTask,
+    AgentProfile,
     FinanceAccount,
     FinanceRecord,
     FineTuneExample,
     MemoryFact,
     ScheduleNotification,
     UsageLog,
+    WorkoutExercise,
+    WorkoutPlan,
+    WorkoutSession,
 )
 from app.schemas import ChatResponse, ToolCallTrace
 from app.services.embeddings import (
@@ -285,15 +289,159 @@ AGENT_TOOLS: list[dict[str, Any]] = [
             "required": ["notification_id"],
         },
     },
+    {
+        "type": "function",
+        "name": "create_workout_plan",
+        "description": (
+            "Cria uma Ficha / Rotina de Treino estruturada na seção de Treinos (SmartWorkout), "
+            "com exercícios da biblioteca, séries, repetições, descanso e foco muscular."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Nome da ficha de treino (ex: 'Treino A — Peito, Ombros e Tríceps')",
+                },
+                "split_label": {
+                    "type": "string",
+                    "description": "Divisão: ABC, ABCD, Push/Pull/Legs, Upper/Lower, Full Body",
+                },
+                "target_muscles": {
+                    "type": "string",
+                    "description": "Grupos musculares trabalhados (ex: 'Peito, Ombros, Tríceps')",
+                },
+                "goal": {
+                    "type": "string",
+                    "description": "Objetivo: Hipertrofia, Força, Definição, Condicionamento",
+                },
+                "scheduled_days": {
+                    "type": "string",
+                    "description": "Dias planejados na semana (ex: 'Seg, Qui')",
+                },
+                "estimated_duration_min": {
+                    "type": "integer",
+                    "description": "Duração estimada em minutos (ex: 60)",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Dicas técnicas e estratégia de progressão de carga",
+                },
+                "exercises": {
+                    "type": "array",
+                    "description": "Lista de exercícios prescritos na ficha",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "exercise_name": {"type": "string", "description": "Nome do exercício (ex: 'Supino Inclinado com Halteres')"},
+                            "muscle_group": {"type": "string", "description": "Grupo muscular (Peito, Costas, Pernas, Glúteos, Ombros, Bíceps, Tríceps, Antebraço, Abdômen)"},
+                            "equipment": {"type": "string", "description": "Equipamento (Barra, Halteres, Máquina, Polia / Cabo, Peso Corporal, Barra W)"},
+                            "sets": {"type": "integer", "description": "Número de séries (ex: 4)"},
+                            "reps": {"type": "string", "description": "Faixa de repetições (ex: '8-12')"},
+                            "target_weight_kg": {"type": "number", "description": "Carga inicial ou meta em kg (opcional)"},
+                            "rest_seconds": {"type": "integer", "description": "Descanso entre séries em segundos (ex: 90)"},
+                            "rir": {"type": "string", "description": "Repetições na reserva / intensidade (ex: '1-2 RIR')"},
+                            "notes": {"type": "string", "description": "Dica rápida de execução"},
+                        },
+                        "required": ["exercise_name", "muscle_group", "sets", "reps"],
+                    },
+                },
+            },
+            "required": ["title", "target_muscles", "exercises"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "log_workout_session",
+        "description": (
+            "Registra no Diário de Treinos um treino realizado pelo usuário, anotando o dia em que treinou, "
+            "quantos exercícios fez, séries, repetições e a carga (kg) que pegou em cada exercício."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "session_date": {
+                    "type": "string",
+                    "description": "Data do treino no formato YYYY-MM-DD (se hoje, use a data atual)",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Nome do treino realizado (ex: 'Treino A — Peito e Tríceps')",
+                },
+                "muscle_groups": {
+                    "type": "string",
+                    "description": "Grupos musculares trabalhados no dia (ex: 'Peito, Tríceps')",
+                },
+                "duration_minutes": {
+                    "type": "integer",
+                    "description": "Duração do treino em minutos (ex: 60)",
+                },
+                "perceived_effort": {
+                    "type": "integer",
+                    "description": "Esforço percebido RPE de 1 a 10 (ex: 8)",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Observações sobre o treino, sensação de força ou recorde batido",
+                },
+                "exercises_performed": {
+                    "type": "array",
+                    "description": "Lista dos exercícios realizados com séries, repetições e carga em kg",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "exercise_name": {"type": "string", "description": "Nome do exercício"},
+                            "muscle_group": {"type": "string", "description": "Grupo muscular (Peito, Costas, Pernas, Glúteos, Ombros, Bíceps, Tríceps, Antebraço, Abdômen)"},
+                            "equipment": {"type": "string", "description": "Equipamento utilizado"},
+                            "sets_count": {"type": "integer", "description": "Quantidade de séries feitas (ex: 4)"},
+                            "reps": {"type": "string", "description": "Repetições feitas por série (ex: '10' ou '12,10,8')"},
+                            "weight_kg": {"type": "number", "description": "Carga utilizada em kg (ex: 32.0)"},
+                        },
+                        "required": ["exercise_name", "sets_count", "reps", "weight_kg"],
+                    },
+                },
+            },
+            "required": ["title", "exercises_performed"],
+        },
+    },
+    {
+        "type": "function",
+        "name": "search_workout_exercises",
+        "description": (
+            "Consulta a Biblioteca de Exercícios estilo SmartWorkout filtrando por grupo muscular, "
+            "equipamento ou nome do exercício."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "muscle_group": {
+                    "type": "string",
+                    "description": "Filtro opcional de grupo muscular: Peito, Costas, Pernas, Glúteos, Ombros, Bíceps, Tríceps, Antebraço, Abdômen",
+                },
+                "equipment": {
+                    "type": "string",
+                    "description": "Filtro opcional de equipamento: Barra, Halteres, Máquina, Polia / Cabo, Peso Corporal, Barra W",
+                },
+                "query": {
+                    "type": "string",
+                    "description": "Termo de busca (ex: 'supino', 'agachamento', 'remada')",
+                },
+            },
+        },
+    },
 ]
 
 
-def build_system_instruction(db: Session) -> str:
+def build_system_instruction(
+    db: Session, agent_profile: Optional[AgentProfile] = None
+) -> str:
     """
     Constrói o System Prompt dinâmico com:
-    1. Core Memory (Fatos importantes sobre o usuário)
-    2. Resumo em tempo real das Contas/Cartões e Lançamentos Pendentes
-    3. Resumo das Atividades da Faculdade Pendentes
+    1. Identidade e instruções do Agente selecionado (ex: SmartWorkout Coach IA ou Second Brain Orquestrador)
+    2. Core Memory (Fatos importantes sobre o usuário)
+    3. Resumo de Treinos SmartWorkout (Fichas ativas, dias treinados, cargas e PRs)
+    4. Resumo em tempo real das Contas/Cartões e Lançamentos Pendentes
+    5. Resumo das Atividades da Faculdade e Agenda
     """
     memories = (
         db.query(MemoryFact)
@@ -320,6 +468,19 @@ def build_system_instruction(db: Session) -> str:
         .filter(ScheduleNotification.enabled.is_(True))
         .order_by(ScheduleNotification.notify_time.asc())
         .limit(25)
+        .all()
+    )
+    workout_plans = (
+        db.query(WorkoutPlan)
+        .filter(WorkoutPlan.active.is_(True))
+        .order_by(WorkoutPlan.id.desc())
+        .limit(10)
+        .all()
+    )
+    workout_sessions = (
+        db.query(WorkoutSession)
+        .order_by(WorkoutSession.session_date.desc(), WorkoutSession.id.desc())
+        .limit(12)
         .all()
     )
 
@@ -367,19 +528,59 @@ def build_system_instruction(db: Session) -> str:
         or "Nenhuma notificação/aula agendada ainda."
     )
 
-    return f"""Você é o **Second Brain AI**, o agente pessoal inteligente do Weuller.
-Sua missão é ajudá-lo a gerenciar a vida no dia a dia com precisão absoluta: finanças pessoais (saldos, contas de cartão, gastos), atividades da faculdade (provas, trabalhos, prazos), agenda/notificações (grade de aulas de segunda a sexta, entrevistas, lembretes) e memória pessoal/documentos (RAG).
+    plan_lines = (
+        "\n".join(
+            f"- [Ficha ID:{p.id} | {p.split_label} | {p.goal}] {p.title} ({p.target_muscles}) — "
+            f"{len(p.exercises or [])} exercícios | Dias: {p.scheduled_days or 'Flexível'}"
+            for p in workout_plans
+        )
+        or "Nenhuma ficha de treino cadastrada ainda."
+    )
+
+    sess_lines = (
+        "\n".join(
+            f"- [Data: {ws.session_date}] {ws.title} ({ws.muscle_groups}) | "
+            f"{ws.exercises_count} exercícios | {ws.total_sets} séries | "
+            f"Maior carga: {ws.max_weight_kg} kg | Volume: {ws.total_volume_kg} kg"
+            for ws in workout_sessions
+        )
+        or "Nenhum treino registrado ainda."
+    )
+
+    agent_header = (
+        f"Você está operando como o agente **{agent_profile.name}** ({agent_profile.role}).\n"
+        f"Instruções específicas deste agente:\n{agent_profile.system_prompt}\n"
+        if agent_profile
+        else (
+            "Você é o **Second Brain AI**, o agente pessoal inteligente do Weuller.\n"
+            "Sua missão é ajudá-lo a gerenciar a vida no dia a dia com precisão absoluta: "
+            "treinos e academia (SmartWorkout), finanças pessoais, atividades da faculdade, agenda/notificações e memória/RAG."
+        )
+    )
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+
+    return f"""{agent_header}
+Data atual do sistema: {today_str}
 
 ### REGRAS DE COMPORTAMENTO DO AGENTE:
-1. Sempre que o usuário informar um novo gasto, conta de cartão, salário ou saldo de conta, chame imediatamente a ferramenta correspondente (`add_finance_record` ou `upsert_bank_account`).
-2. Sempre que o usuário mencionar uma prova, trabalho, entrega ou aula da faculdade, registre com `add_academic_task` ou atualize com `update_academic_task`.
-3. Sempre que o usuário pedir para configurar notificações, agenda de aulas da semana (segunda a sexta) ou lembretes de entrevista/compromisso com dia e hora, chame `upsert_schedule_notification` (você pode chamá-la múltiplas vezes se ele passar várias matérias da semana!).
-4. Sempre que o usuário revelar uma preferência permanente, regra pessoal, meta ou informação recorrente da rotina dele, salve na Memória Core com `save_memory_fact`.
-5. Quando o usuário perguntar sobre algum documento enviado (PDF, fatura, ementa, anotação), use `search_documents_rag`.
-6. Responda sempre em Português do Brasil, de forma clara, organizada em Markdown, confirmando os valores/datas/notificações registrados.
+1. Sempre que o usuário pedir para criar, montar ou estruturar um treino ou ficha de academia, chame `create_workout_plan` (pode chamá-la múltiplas vezes para criar Treino A, Treino B, Treino C, etc.).
+2. Sempre que o usuário disser que treinou ou informar exercícios, séries e cargas (kg) que pegou, chame imediatamente `log_workout_session`.
+3. Sempre que o usuário informar um novo gasto, conta de cartão, salário ou saldo de conta, chame imediatamente `add_finance_record` ou `upsert_bank_account`.
+4. Sempre que o usuário mencionar uma prova, trabalho, entrega ou aula da faculdade, registre com `add_academic_task` ou atualize com `update_academic_task`.
+5. Sempre que o usuário pedir para configurar notificações, agenda de aulas ou horários de treino da semana, chame `upsert_schedule_notification`.
+6. Sempre que o usuário revelar uma preferência permanente, regra pessoal, meta de carga ou informação recorrente, salve na Memória Core com `save_memory_fact`.
+7. Quando o usuário perguntar sobre algum documento enviado (PDF, fatura, ementa, anotação), use `search_documents_rag`.
+8. Responda sempre em Português do Brasil, de forma clara, organizada em Markdown, confirmando os treinos/cargas/valores/datas registrados.
 
 === MEMÓRIA CORE ATUAL (FATOS SOBRE O USUÁRIO) ===
 {mem_lines}
+
+=== FICHAS DE TREINO ATIVAS (SMARTWORKOUT) ===
+{plan_lines}
+
+=== ÚLTIMOS TREINOS REGISTRADOS (DIAS, QUANTOS EXERCÍCIOS & CARGAS) ===
+{sess_lines}
 
 === CONTAS BANCÁRIAS E CARTÕES ===
 {acc_lines}
@@ -665,6 +866,150 @@ def execute_tool_call(
         db.commit()
         return {"status": "deleted", "notification_id": nid, "title": t}, f"Notificação removida: {t}"
 
+    if name == "create_workout_plan":
+        from app.routers.workouts import ensure_exercise_library_seeded
+
+        ensure_exercise_library_seeded(db)
+        title = str(args.get("title") or "Ficha de Treino SmartWorkout").strip()
+        split_label = str(args.get("split_label") or "ABC").strip()
+        target_muscles = str(args.get("target_muscles") or "Corpo Todo").strip()
+        goal = str(args.get("goal") or "Hipertrofia").strip()
+        scheduled_days = args.get("scheduled_days")
+        estimated_duration = int(args.get("estimated_duration_min") or 60)
+        notes = args.get("notes")
+
+        raw_exercises = args.get("exercises") or []
+        norm_exercises = []
+        for ex in raw_exercises:
+            if not isinstance(ex, dict):
+                continue
+            ex_name = str(ex.get("exercise_name") or ex.get("name") or "Exercício").strip()
+            lib_ex = (
+                db.query(WorkoutExercise)
+                .filter(WorkoutExercise.name.ilike(f"%{ex_name}%"))
+                .first()
+            )
+            norm_exercises.append(
+                {
+                    "exercise_id": lib_ex.id if lib_ex else ex.get("exercise_id"),
+                    "exercise_name": lib_ex.name if lib_ex else ex_name,
+                    "muscle_group": ex.get("muscle_group") or (lib_ex.muscle_group if lib_ex else "Geral"),
+                    "equipment": ex.get("equipment") or (lib_ex.equipment if lib_ex else "Halteres"),
+                    "sets": int(ex.get("sets") or 4),
+                    "reps": str(ex.get("reps") or "8-12"),
+                    "target_weight_kg": float(ex.get("target_weight_kg") or 0.0),
+                    "rest_seconds": int(ex.get("rest_seconds") or 90),
+                    "rir": str(ex.get("rir") or "1-2 RIR"),
+                    "notes": ex.get("notes") or (lib_ex.instructions[:100] if lib_ex else ""),
+                }
+            )
+
+        plan = WorkoutPlan(
+            title=title,
+            split_label=split_label,
+            target_muscles=target_muscles,
+            goal=goal,
+            scheduled_days=scheduled_days,
+            estimated_duration_min=estimated_duration,
+            created_by_agent="SmartWorkout Coach IA",
+            notes=notes,
+            exercises=norm_exercises,
+            active=True,
+        )
+        db.add(plan)
+        db.commit()
+        db.refresh(plan)
+        return (
+            {
+                "status": "created",
+                "plan_id": plan.id,
+                "title": plan.title,
+                "target_muscles": plan.target_muscles,
+                "exercises_count": len(norm_exercises),
+            },
+            f"Ficha criada: '{plan.title}' ({len(norm_exercises)} exercícios)",
+        )
+
+    if name == "log_workout_session":
+        from app.routers.workouts import _compute_session_metrics
+
+        session_date = str(args.get("session_date") or datetime.now().strftime("%Y-%m-%d")).strip()
+        title = str(args.get("title") or "Treino do Dia").strip()
+        duration = int(args.get("duration_minutes") or 60)
+        rpe = int(args.get("perceived_effort") or 8)
+        notes = args.get("notes")
+        raw_ex = args.get("exercises_performed") or []
+
+        ex_count, tot_sets, tot_reps, tot_vol, max_w, norm_ex = _compute_session_metrics(raw_ex)
+        muscle_groups = args.get("muscle_groups")
+        if not muscle_groups and norm_ex:
+            unique_m = []
+            for item in norm_ex:
+                mg = item.get("muscle_group")
+                if mg and mg not in unique_m:
+                    unique_m.append(mg)
+            muscle_groups = ", ".join(unique_m)
+
+        sess = WorkoutSession(
+            session_date=session_date,
+            title=title,
+            muscle_groups=muscle_groups or "Musculação",
+            duration_minutes=duration,
+            perceived_effort=rpe,
+            exercises_count=ex_count,
+            total_sets=tot_sets,
+            total_reps=tot_reps,
+            total_volume_kg=tot_vol,
+            max_weight_kg=max_w,
+            exercises_performed=norm_ex,
+            notes=notes,
+        )
+        db.add(sess)
+        db.commit()
+        db.refresh(sess)
+        return (
+            {
+                "status": "created",
+                "session_id": sess.id,
+                "session_date": sess.session_date,
+                "title": sess.title,
+                "exercises_count": sess.exercises_count,
+                "total_sets": sess.total_sets,
+                "max_weight_kg": sess.max_weight_kg,
+                "total_volume_kg": sess.total_volume_kg,
+            },
+            f"Treino registrado em {sess.session_date}: {sess.title} ({sess.exercises_count} exercícios, carga máx {sess.max_weight_kg} kg)",
+        )
+
+    if name == "search_workout_exercises":
+        from app.routers.workouts import ensure_exercise_library_seeded
+
+        ensure_exercise_library_seeded(db)
+        q = db.query(WorkoutExercise)
+        if args.get("muscle_group"):
+            q = q.filter(WorkoutExercise.muscle_group.ilike(f"%{args['muscle_group']}%"))
+        if args.get("equipment"):
+            q = q.filter(WorkoutExercise.equipment.ilike(f"%{args['equipment']}%"))
+        if args.get("query"):
+            q = q.filter(WorkoutExercise.name.ilike(f"%{args['query']}%"))
+        items = q.limit(12).all()
+        return (
+            {
+                "count": len(items),
+                "exercises": [
+                    {
+                        "id": e.id,
+                        "name": e.name,
+                        "muscle_group": e.muscle_group,
+                        "equipment": e.equipment,
+                        "instructions": e.instructions,
+                    }
+                    for e in items
+                ],
+            },
+            f"Consultados {len(items)} exercícios na Biblioteca SmartWorkout",
+        )
+
     return {"error": f"Tool '{name}' desconhecida"}, f"Tool desconhecida: {name}"
 
 
@@ -700,6 +1045,220 @@ def _run_local_smart_agent_fallback(
     msg = user_message.strip()
     msg_lower = msg.lower()
     val = _extract_brl_value(msg)
+
+    # 0.1 Criar Ficha de Treino / Rotina SmartWorkout com o Agente de Treinos
+    if any(
+        k in msg_lower
+        for k in (
+            "crie um treino",
+            "crie fichas de treino",
+            "monte uma ficha",
+            "monte um treino",
+            "criar treino",
+            "ficha de treino",
+            "treino abc",
+            "push/pull/legs",
+            "upper/lower",
+            "crie uma ficha",
+        )
+    ):
+        from app.routers.workouts import generate_structured_workout_plans_fallback
+        from app.schemas import AIWorkoutGenerateRequest
+
+        split_type = (
+            "Upper/Lower"
+            if "upper" in msg_lower
+            else (
+                "Full Body"
+                if "full" in msg_lower
+                else ("ABCD" if "abcd" in msg_lower else "ABC")
+            )
+        )
+        goal = (
+            "Força"
+            if ("força" in msg_lower or "forca" in msg_lower)
+            else ("Definição" if "defini" in msg_lower else "Hipertrofia")
+        )
+        eq = (
+            "Peso Corporal / Casa"
+            if ("casa" in msg_lower or "corporal" in msg_lower)
+            else "Academia Completa"
+        )
+        req_obj = AIWorkoutGenerateRequest(
+            goal=goal,
+            split_type=split_type,
+            days_per_week=4 if split_type in ("ABCD", "Upper/Lower") else 3,
+            experience_level="Intermediário",
+            available_equipment=eq,
+            focus_muscles=None,
+            custom_instructions=msg[:120],
+        )
+        created_plans = generate_structured_workout_plans_fallback(
+            db=db, req=req_obj, agent_name="SmartWorkout Coach IA"
+        )
+        for p in created_plans:
+            tools_trace.append(
+                ToolCallTrace(
+                    name="create_workout_plan",
+                    arguments={"title": p.title, "split_label": p.split_label, "target_muscles": p.target_muscles},
+                    result_summary=f"Ficha criada: '{p.title}' ({len(p.exercises or [])} exercícios)",
+                )
+            )
+        plans_md = []
+        for p in created_plans:
+            ex_lines = "\n".join(
+                f"  - **{e['exercise_name']}** (*{e['muscle_group']} • {e['equipment']}*) — **{e['sets']}x {e['reps']}** | Descanso: `{e['rest_seconds']}s` ({e.get('rir', '1-2 RIR')})"
+                for e in (p.exercises or [])
+            )
+            plans_md.append(
+                f"#### 🏋️ {p.title}\n"
+                f"- **Músculos**: {p.target_muscles} | **Dias sugeridos**: `{p.scheduled_days}`\n"
+                f"{ex_lines}"
+            )
+        return (
+            f"💪 **Fichas de Treino Criadas pelo SmartWorkout Coach IA!**\n\n"
+            f"Estruturei **{len(created_plans)} fichas** baseadas na **Biblioteca de Exercícios SmartWorkout** "
+            f"para o objetivo de **{goal}** (Divisão **{split_type}**):\n\n"
+            + "\n\n".join(plans_md)
+            + "\n\n✅ Todas as fichas já estão salvas na aba **Treinos & Academia** prontas para você iniciar e anotar suas cargas!"
+        )
+
+    # 0.2 Registrar Treino Realizado + Cargas (kg) no Diário de Treinos
+    if any(
+        k in msg_lower
+        for k in ("treinei", "registre meu treino", "registrar treino", "fiz supino", "fiz agachamento", "treino de hoje")
+    ) and re.search(r"\d+\s*kg", msg_lower):
+        from app.routers.workouts import ensure_exercise_library_seeded
+
+        ensure_exercise_library_seeded(db)
+        all_lib = db.query(WorkoutExercise).all()
+        extracted_exercises: list[dict[str, Any]] = []
+
+        # Procura exercícios da biblioteca mencionados na mensagem ou padrões "Nome 4x10 com 80kg"
+        segments = re.split(r"[,;\n]+|\s+e\s+(?=[A-ZÀ-Ÿa-zà-ÿ]+\s+\d+x|\b(?:supino|agachamento|leg|rosca|tríceps|triceps|puxada|remada|desenvolvimento|elevação|elevacao|cadeira|mesa|stiff))", msg)
+        for seg in segments:
+            seg_clean = seg.strip()
+            if not seg_clean:
+                continue
+            w_match = re.search(r"(\d+(?:[.,]\d+)?)\s*kg", seg_clean, re.IGNORECASE)
+            if not w_match:
+                continue
+            weight_kg = float(w_match.group(1).replace(",", "."))
+            sr_match = re.search(r"(\d+)\s*[xX]\s*(\d+(?:-\d+)?)", seg_clean)
+            sets_count = int(sr_match.group(1)) if sr_match else 4
+            reps_str = sr_match.group(2) if sr_match else "10"
+
+            matched_lib = None
+            seg_l = seg_clean.lower()
+            for lib_ex in all_lib:
+                # Verifica correspondência por nome ou palavras-chave principais
+                keywords = [w for w in lib_ex.name.lower().split() if len(w) > 3 and w not in ("com", "para", "polia", "barra", "halteres", "máquina")]
+                if lib_ex.name.lower() in seg_l or (keywords and all(k in seg_l for k in keywords[:2])):
+                    matched_lib = lib_ex
+                    break
+
+            if matched_lib:
+                ex_name = matched_lib.name
+                muscle = matched_lib.muscle_group
+                equip = matched_lib.equipment
+                ex_id = matched_lib.id
+            else:
+                # Limpa o nome do exercício removendo números de séries e kg
+                raw_name = re.sub(r"(?:treinei.*?hoje:?|registre meu treino.*?hoje:?|fiz)\s*", "", seg_clean, flags=re.IGNORECASE)
+                raw_name = re.sub(r"\d+\s*[xX]\s*\d+(?:-\d+)?.*$", "", raw_name).strip()
+                raw_name = re.sub(r"(?:com\s+)?\d+(?:[.,]\d+)?\s*kg.*$", "", raw_name, flags=re.IGNORECASE).strip(" -:,")
+                ex_name = raw_name.title() if len(raw_name) >= 3 else "Exercício Registrado"
+                muscle = (
+                    "Peito" if "supino" in seg_l or "crucifixo" in seg_l else
+                    "Costas" if "puxada" in seg_l or "remada" in seg_l else
+                    "Pernas" if "agachamento" in seg_l or "leg" in seg_l or "extensora" in seg_l or "flexora" in seg_l else
+                    "Ombros" if "desenvolvimento" in seg_l or "elevação" in seg_l or "elevacao" in seg_l else
+                    "Bíceps" if "rosca" in seg_l else
+                    "Tríceps" if "tríceps" in seg_l or "triceps" in seg_l else "Geral"
+                )
+                equip = "Barra" if "barra" in seg_l else ("Máquina" if "máquina" in seg_l or "press" in seg_l or "cadeira" in seg_l else "Halteres")
+                ex_id = None
+
+            extracted_exercises.append(
+                {
+                    "exercise_id": ex_id,
+                    "exercise_name": ex_name,
+                    "muscle_group": muscle,
+                    "equipment": equip,
+                    "sets_count": sets_count,
+                    "reps": reps_str,
+                    "weight_kg": weight_kg,
+                }
+            )
+
+        if extracted_exercises:
+            muscles_used = []
+            for item in extracted_exercises:
+                if item["muscle_group"] not in muscles_used:
+                    muscles_used.append(item["muscle_group"])
+            muscles_label = ", ".join(muscles_used)
+            today_iso = datetime.now().strftime("%Y-%m-%d")
+            args = {
+                "session_date": today_iso,
+                "title": f"Treino de {muscles_label}",
+                "muscle_groups": muscles_label,
+                "duration_minutes": 60,
+                "perceived_effort": 8,
+                "exercises_performed": extracted_exercises,
+                "notes": msg,
+            }
+            res_dict, summary = execute_tool_call(db, "log_workout_session", args, rag_sources)
+            tools_trace.append(ToolCallTrace(name="log_workout_session", arguments=args, result_summary=summary))
+            ex_bullets = "\n".join(
+                f"- 🏋️ **{e['exercise_name']}** ({e['muscle_group']}): **{e['sets_count']}x{e['reps']}** com **{e['weight_kg']} kg**"
+                for e in extracted_exercises
+            )
+            return (
+                f"✅ **Treino Anotado no Diário SmartWorkout!**\n\n"
+                f"- **Data do Treino**: `{today_iso}`\n"
+                f"- **Foco Muscular**: {muscles_label}\n"
+                f"- **Quantos Exercícios Fez**: **{res_dict['exercises_count']} exercícios** ({res_dict['total_sets']} séries)\n"
+                f"- **Maior Carga do Dia**: **{res_dict['max_weight_kg']} kg**\n"
+                f"- **Volume Total Movimentado**: **{res_dict['total_volume_kg']} kg**\n\n"
+                f"#### 📋 Cargas Registradas:\n{ex_bullets}"
+            )
+
+    # 0.3 Consultas sobre histórico de treinos, dias treinados e recordes de carga (PRs)
+    if any(
+        k in msg_lower
+        for k in (
+            "quantos dias eu treinei",
+            "quantos dias treinei",
+            "maiores cargas",
+            "meus recordes",
+            "meus treinos",
+            "resumo dos meus treinos",
+            "quantos exercicios eu fiz",
+            "quantos exercícios eu fiz",
+        )
+    ):
+        from app.routers.workouts import get_workouts_summary
+
+        ws = get_workouts_summary(db)
+        pr_lines = (
+            "\n".join(
+                f"  - 🏆 **{pr['exercise_name']}** ({pr['muscle_group']}): Maior Carga **{pr['personal_record_kg']} kg** "
+                f"(1RM Est.: `{pr['estimated_1rm_kg']} kg` • Treinado {pr['times_trained']}x)"
+                for pr in ws["personal_records"][:8]
+            )
+            or "  - Nenhuma carga registrada ainda."
+        )
+        dates_str = ", ".join(f"`{d}`" for d in ws["trained_dates"][:10]) or "Nenhum dia registrado ainda"
+        return (
+            f"### 🏋️ Resumo dos Seus Treinos (SmartWorkout)\n\n"
+            f"- **Dias Treinados no Mês**: **{ws['days_trained_this_month']} dias** ({ws['days_trained_this_week']} dias nesta semana | {ws['days_trained_total']} no total)\n"
+            f"- **Datas que você treinou**: {dates_str}\n"
+            f"- **Quantos Exercícios Você Fez**: **{ws['total_exercises_done']} exercícios concluídos** ({ws['total_sets_done']} séries totais)\n"
+            f"- **Volume Total Movimentado**: **{ws['total_volume_kg']:,.1f} kg**\n"
+            f"- **Fichas de Treino Ativas**: **{ws['active_plans_count']} fichas** | **Biblioteca**: **{ws['library_count']} exercícios**\n\n"
+            f"#### 🏆 Suas Maiores Cargas (Recordes Pessoais / PRs)\n"
+            f"{pr_lines}"
+        )
 
     # 1. Atualizar saldo de conta bancária
     if any(k in msg_lower for k in ("atualize o saldo", "saldo da minha conta", "meu saldo no", "saldo do", "saldo no")) and val is not None:
@@ -967,6 +1526,7 @@ def run_agent_interaction(
     previous_interaction_id: Optional[str] = None,
     model_override: Optional[str] = None,
     save_for_finetune: bool = False,
+    agent_id: Optional[int] = None,
 ) -> ChatResponse:
     """
     Executa um turno completo com o Agente Gemini via Interactions API (`client.interactions.create`),
@@ -974,14 +1534,39 @@ def run_agent_interaction(
     Possui tratamento completo de erros, retry automático sem `previous_interaction_id` em turnos seguintes
     e fallback agêntico local para nunca travar a conversa.
     """
+    from app.routers.agents import ensure_default_agents_seeded
+
     start_ts = time.perf_counter()
-    model_name = model_override or settings.GEMINI_AGENT_MODEL
+    ensure_default_agents_seeded(db)
+
+    agent_profile: Optional[AgentProfile] = None
+    if agent_id:
+        agent_profile = db.query(AgentProfile).filter(AgentProfile.id == agent_id).first()
+    if not agent_profile:
+        agent_profile = (
+            db.query(AgentProfile)
+            .filter(AgentProfile.is_default.is_(True), AgentProfile.enabled.is_(True))
+            .first()
+        )
+
+    model_name = (
+        model_override
+        or (agent_profile.model if agent_profile and agent_profile.model else None)
+        or settings.GEMINI_AGENT_MODEL
+    )
+
+    # Filtra as tools habilitadas para este agente (ou todas se não houver restrição)
+    if agent_profile and agent_profile.tools_enabled:
+        enabled_set = set(agent_profile.tools_enabled)
+        active_tools = [t for t in AGENT_TOOLS if t["name"] in enabled_set] or AGENT_TOOLS
+    else:
+        active_tools = AGENT_TOOLS
 
     # Busca preventiva no RAG caso existam documentos relacionados à pergunta
     auto_rag_hits = hybrid_search_chunks(db, query=user_message, top_k=3)
     rag_sources: list[dict[str, Any]] = [h for h in auto_rag_hits if h["score"] >= 0.35]
 
-    system_instruction = build_system_instruction(db)
+    system_instruction = build_system_instruction(db, agent_profile=agent_profile)
     if rag_sources:
         rag_context_text = "\n\n".join(
             f"[Fonte: {h['filename']} | Trecho #{h['chunk_index'] + 1} | Score: {h['score']}]\n{h['content']}"
@@ -1009,6 +1594,8 @@ def run_agent_interaction(
             rag_sources=rag_sources,
             tokens_used=max(1, len(reply_text) // 4),
             latency_ms=latency_ms,
+            agent_id=agent_profile.id if agent_profile else None,
+            agent_name=agent_profile.name if agent_profile else "Second Brain AI",
         )
 
     total_tokens = 0
@@ -1021,7 +1608,7 @@ def run_agent_interaction(
             "model": model_name,
             "input": user_message,
             "system_instruction": system_instruction,
-            "tools": AGENT_TOOLS,
+            "tools": active_tools,
         }
         if previous_interaction_id:
             create_kwargs["previous_interaction_id"] = previous_interaction_id
@@ -1089,12 +1676,12 @@ def run_agent_interaction(
                 )
 
             try:
-                updated_sys_instruction = build_system_instruction(db)
+                updated_sys_instruction = build_system_instruction(db, agent_profile=agent_profile)
                 interaction = client.interactions.create(
                     model=model_name,
                     previous_interaction_id=interaction.id,
                     system_instruction=updated_sys_instruction,
-                    tools=AGENT_TOOLS,
+                    tools=active_tools,
                     input=function_results_input,
                 )
                 if getattr(interaction, "usage", None):
@@ -1149,7 +1736,11 @@ def run_agent_interaction(
     if save_for_finetune and reply_text:
         ft_example = FineTuneExample(
             category="chat_curated",
-            system_instruction="Você é o Second Brain AI, assistente pessoal financeiro e acadêmico do Weuller.",
+            system_instruction=(
+                agent_profile.system_prompt
+                if agent_profile
+                else "Você é o Second Brain AI, assistente pessoal financeiro e acadêmico do Weuller."
+            ),
             user_input=user_message,
             ideal_output=reply_text,
             approved=True,
@@ -1166,4 +1757,6 @@ def run_agent_interaction(
         rag_sources=rag_sources,
         tokens_used=total_tokens,
         latency_ms=latency_ms,
+        agent_id=agent_profile.id if agent_profile else None,
+        agent_name=agent_profile.name if agent_profile else "Second Brain AI",
     )

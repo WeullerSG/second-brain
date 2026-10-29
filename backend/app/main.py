@@ -14,7 +14,7 @@ from app.models import (
     MemoryFact,
     ScheduleNotification,
 )
-from app.routers import academic, app_settings, auth as auth_router, chat, documents, finances, memories, notifications, telemetry
+from app.routers import academic, agents, app_settings, auth as auth_router, chat, documents, finances, memories, notifications, telemetry, workouts
 
 
 # Dados de exemplo antigos (versões anteriores populavam o banco com eles sempre que
@@ -120,6 +120,8 @@ app.add_middleware(
 
 app.include_router(auth_router.router)
 app.include_router(chat.router)
+app.include_router(agents.router)
+app.include_router(workouts.router)
 app.include_router(memories.router)
 app.include_router(finances.router)
 app.include_router(academic.router)

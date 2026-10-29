@@ -236,12 +236,15 @@ export interface ChatResponse {
   tokens_used: number;
   latency_ms: number;
   conversation_id?: number | null;
+  agent_id?: number | null;
+  agent_name?: string | null;
 }
 
 export interface ConversationSummary {
   id: number;
   title: string;
   model?: string | null;
+  agent_id?: number | null;
   message_count: number;
   created_at: string;
   updated_at: string;
@@ -253,6 +256,8 @@ export interface ConversationMessageItem {
   text: string;
   meta?: {
     model?: string;
+    agent_id?: number | null;
+    agent_name?: string | null;
     tools?: ToolCallTrace[];
     rag_sources?: ChatResponse["rag_sources"];
     tokens?: number;
@@ -350,3 +355,183 @@ export interface TelemetryOverview {
     system_ram_used_gb: number;
   };
 }
+
+// --- Seção de Agentes IA ---
+export interface AgentToolMeta {
+  name: string;
+  label: string;
+  category: string;
+  description: string;
+}
+
+export interface AgentProfile {
+  id: number;
+  slug: string;
+  name: string;
+  role: string;
+  description: string;
+  category: "treino" | "geral" | "financas" | "faculdade" | "personalizado" | string;
+  avatar_icon: string;
+  accent_color: string;
+  model?: string | null;
+  system_prompt: string;
+  tools_enabled: string[];
+  quick_prompts: string[];
+  is_default: boolean;
+  is_system: boolean;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+// --- Seção de Treinos & Biblioteca SmartWorkout ---
+export interface WorkoutExercise {
+  id: number;
+  slug: string;
+  name: string;
+  muscle_group: string;
+  secondary_muscles?: string | null;
+  equipment: string;
+  difficulty: string;
+  mechanic: string;
+  instructions: string;
+  common_mistakes?: string | null;
+  video_url?: string | null;
+  is_custom: boolean;
+  personal_record_kg: number;
+  last_weight_kg: number;
+  last_trained_date?: string | null;
+  estimated_1rm_kg: number;
+  times_trained: number;
+  created_at: string;
+}
+
+export interface WorkoutPlanExerciseItem {
+  exercise_id?: number | null;
+  exercise_name: string;
+  muscle_group: string;
+  equipment: string;
+  sets: number;
+  reps: string;
+  target_weight_kg: number;
+  rest_seconds: number;
+  rir: string;
+  notes?: string | null;
+}
+
+export interface WorkoutPlan {
+  id: number;
+  title: string;
+  split_label: string;
+  target_muscles: string;
+  goal: string;
+  scheduled_days?: string | null;
+  estimated_duration_min: number;
+  created_by_agent: string;
+  notes?: string | null;
+  exercises: WorkoutPlanExerciseItem[];
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkoutSetDetail {
+  set_number: number;
+  reps: number;
+  weight_kg: number;
+  rir?: number | null;
+  is_warmup?: boolean;
+}
+
+export interface WorkoutSessionExerciseItem {
+  exercise_id?: number | null;
+  exercise_name: string;
+  muscle_group: string;
+  equipment: string;
+  sets_count: number;
+  reps: string;
+  weight_kg: number;
+  max_weight_kg?: number;
+  set_details?: WorkoutSetDetail[];
+  volume_kg?: number;
+  notes?: string | null;
+}
+
+export interface WorkoutSession {
+  id: number;
+  session_date: string;
+  title: string;
+  plan_id?: number | null;
+  muscle_groups?: string | null;
+  duration_minutes: number;
+  perceived_effort: number;
+  exercises_count: number;
+  total_sets: number;
+  total_reps: number;
+  total_volume_kg: number;
+  max_weight_kg: number;
+  exercises_performed: WorkoutSessionExerciseItem[];
+  notes?: string | null;
+  created_at: string;
+}
+
+export interface PersonalRecordItem {
+  exercise_name: string;
+  muscle_group: string;
+  equipment: string;
+  personal_record_kg: number;
+  best_reps: number;
+  last_weight_kg: number;
+  last_trained_date?: string | null;
+  estimated_1rm_kg: number;
+  times_trained: number;
+}
+
+export interface WorkoutsSummary {
+  total_sessions: number;
+  days_trained_total: number;
+  days_trained_this_month: number;
+  days_trained_this_week: number;
+  trained_dates: string[];
+  trained_dates_detail: Record<
+    string,
+    Array<{
+      id: number;
+      title: string;
+      muscle_groups?: string | null;
+      exercises_count: number;
+      total_sets: number;
+      max_weight_kg: number;
+      total_volume_kg: number;
+    }>
+  >;
+  total_exercises_done: number;
+  exercises_done_this_month: number;
+  total_sets_done: number;
+  total_volume_kg: number;
+  heaviest_lift?: PersonalRecordItem | null;
+  personal_records: PersonalRecordItem[];
+  muscle_group_breakdown: Array<{
+    muscle_group: string;
+    exercises_done: number;
+    sets_done: number;
+    volume_kg: number;
+    max_weight_kg: number;
+  }>;
+  library_count: number;
+  active_plans_count: number;
+  plans: WorkoutPlan[];
+  recent_sessions: WorkoutSession[];
+}
+
+export interface AIWorkoutGenerateRequest {
+  goal: string;
+  split_type: string;
+  days_per_week: number;
+  experience_level: string;
+  available_equipment: string;
+  focus_muscles?: string;
+  custom_instructions?: string;
+  agent_id?: number | null;
+}
+

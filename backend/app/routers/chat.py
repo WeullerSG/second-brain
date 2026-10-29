@@ -28,6 +28,7 @@ def _conversation_out(conv: Conversation, message_count: int) -> ConversationOut
         id=conv.id,
         title=conv.title,
         model=conv.model,
+        agent_id=conv.agent_id,
         message_count=message_count,
         created_at=conv.created_at,
         updated_at=conv.updated_at,
@@ -45,8 +46,13 @@ def _get_conversation(db: Session, conversation_id: int) -> Conversation:
 def chat_with_agent(payload: ChatRequest, db: Session = Depends(get_db)):
     if payload.conversation_id:
         conv = _get_conversation(db, payload.conversation_id)
+        if payload.agent_id is not None:
+            conv.agent_id = payload.agent_id
     else:
-        conv = Conversation(title=_title_from_message(payload.message))
+        conv = Conversation(
+            title=_title_from_message(payload.message),
+            agent_id=payload.agent_id,
+        )
         db.add(conv)
         db.flush()
 
@@ -60,6 +66,7 @@ def chat_with_agent(payload: ChatRequest, db: Session = Depends(get_db)):
         previous_interaction_id=conv.last_interaction_id or payload.previous_interaction_id,
         model_override=model,
         save_for_finetune=payload.save_for_finetune,
+        agent_id=payload.agent_id or conv.agent_id,
     )
 
     db.add(
@@ -69,6 +76,8 @@ def chat_with_agent(payload: ChatRequest, db: Session = Depends(get_db)):
             text=response.reply,
             meta={
                 "model": response.model,
+                "agent_id": response.agent_id,
+                "agent_name": response.agent_name,
                 "tools": [t.model_dump() for t in response.tools_called],
                 "rag_sources": response.rag_sources,
                 "tokens": response.tokens_used,
@@ -78,6 +87,8 @@ def chat_with_agent(payload: ChatRequest, db: Session = Depends(get_db)):
     )
     if response.interaction_id:
         conv.last_interaction_id = response.interaction_id
+    if response.agent_id:
+        conv.agent_id = response.agent_id
     conv.model = response.model
     conv.updated_at = utcnow()
     db.commit()
