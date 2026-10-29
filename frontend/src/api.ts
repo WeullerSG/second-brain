@@ -536,6 +536,17 @@ export const api = {
       method: "DELETE",
     }),
   suggestTodayWorkout: () => request<TodayWorkoutSuggestion>("/workouts/suggest-today"),
+  /** Treino sob medida: "tenho 30 minutos e quero treinar só peito". */
+  quickWorkout: (data: { text?: string; minutes?: number; muscle_groups?: string[]; include_cardio?: boolean }) =>
+    request<TodayWorkoutSuggestion>("/workouts/quick", { method: "POST", body: JSON.stringify(data) }),
+  getWeeklyRoutine: () => request<WorkoutPlan[]>("/workouts/weekly-routine"),
+  createWeeklyRoutine: (data: {
+    days: string[];
+    minutes: number;
+    include_cardio: boolean;
+    cardio_minutes: number;
+    goal?: string;
+  }) => request<WorkoutPlan[]>("/workouts/weekly-routine", { method: "POST", body: JSON.stringify(data) }),
   generateAIWorkoutPlan: (data: AIWorkoutGenerateRequest) =>
     request<{
       status: string;

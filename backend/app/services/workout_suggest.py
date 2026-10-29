@@ -127,8 +127,21 @@ def suggest_today(db: Session, today: Optional[date] = None) -> dict[str, Any]:
                 ]
             return _days_since(max(dates) if dates else None, today)
 
-        plan = max(plans, key=lambda p: (plan_last_done(p), -p.id))
-        days = plan_last_done(plan)
+        from app.services.workout_builder import plan_runs_on
+
+        weekday = ["segunda", "terça", "quarta", "quinta", "sexta", "sábado", "domingo"][today.weekday()]
+        scheduled_today = [p for p in plans if plan_runs_on(p, today)]
+        has_schedule = any(p.scheduled_days for p in plans)
+        if scheduled_today:
+            plan = scheduled_today[0]
+            reason = f"Hoje é {weekday}: dia de {plan.title.split(' — ', 1)[-1]} na sua rotina."
+        else:
+            plan = max(plans, key=lambda p: (plan_last_done(p), -p.id))
+            days_ago = plan_last_done(plan)
+            when = "nunca feita" if days_ago >= NEVER_TRAINED_DAYS else f"feita há {days_ago} dia(s)"
+            reason = f"É a ficha que está há mais tempo sem ser treinada ({when})."
+            if has_schedule:
+                reason = f"Hoje ({weekday}) é dia de descanso na sua rotina. Se quiser treinar mesmo assim: {reason[0].lower()}{reason[1:]}"
         items = []
         for pe in plan.exercises:
             name = str(pe.get("exercise_name", "")).strip()
@@ -151,13 +164,17 @@ def suggest_today(db: Session, today: Optional[date] = None) -> dict[str, Any]:
                 }
             if not last and float(pe.get("target_weight_kg") or 0) > 0:
                 item["weight_kg"] = float(pe["target_weight_kg"])
+            if str(pe.get("muscle_group")) == "Cardio":
+                item["sets_count"] = 1
+                item["reps"] = str(pe.get("reps") or "15 min")
+                item["weight_kg"] = 0.0
+                item["notes"] = pe.get("notes") or "Cardio em ritmo moderado."
             items.append(item)
-        when = "nunca feita" if days >= NEVER_TRAINED_DAYS else f"feita há {days} dia(s)"
         return {
             "title": plan.title,
             "plan_id": plan.id,
             "muscle_groups": plan.target_muscles,
-            "reason": f"É a ficha que está há mais tempo sem ser treinada ({when}).",
+            "reason": reason,
             "trained_today": trained_today,
             "exercises": items,
         }

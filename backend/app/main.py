@@ -79,11 +79,13 @@ def seed_reference_data() -> None:
     from app.routers.agents import ensure_default_agents_seeded
     from app.routers.workouts import ensure_exercise_library_seeded
     from app.services.exercise_media import backfill_exercise_images
+    from app.services.workout_builder import ensure_cardio_seeded
 
     db = SessionLocal()
     try:
         ensure_exercise_library_seeded(db)
         ensure_default_agents_seeded(db)
+        ensure_cardio_seeded(db)
         backfill_exercise_images(db)
     finally:
         db.close()

@@ -56,6 +56,7 @@ const MUSCLE_GROUPS = [
   "Tríceps",
   "Antebraço",
   "Abdômen",
+  "Cardio",
 ];
 
 const EQUIPMENTS = [
@@ -78,7 +79,25 @@ const MUSCLE_BADGE_COLORS: Record<string, string> = {
   Tríceps: "bg-[#8b5cf6]/15 text-[#8b5cf6]",
   Antebraço: "bg-amber-500/15 text-amber-500",
   Abdômen: "bg-emerald-500/15 text-emerald-500",
+  Cardio: "bg-rose-500/15 text-rose-500",
 };
+
+const WEEK_DAYS: Array<[string, string]> = [
+  ["mon", "Seg"],
+  ["tue", "Ter"],
+  ["wed", "Qua"],
+  ["thu", "Qui"],
+  ["fri", "Sex"],
+  ["sat", "Sáb"],
+  ["sun", "Dom"],
+];
+
+const QUICK_EXAMPLES = [
+  "Tenho 30 minutos e quero treinar só peito",
+  "45 min de bíceps e tríceps",
+  "1h de pernas com cardio",
+  "20 minutos de cardio",
+];
 
 export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
   summary,
@@ -112,6 +131,15 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
   // Sugestão do treino de hoje calculada a partir do histórico
   const [suggestion, setSuggestion] = useState<TodayWorkoutSuggestion | null>(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
+  const [quickText, setQuickText] = useState("");
+
+  // Rotina semanal (segunda a sexta, com cardio)
+  const [routine, setRoutine] = useState<WorkoutPlan[]>([]);
+  const [routineDays, setRoutineDays] = useState<string[]>(["mon", "tue", "wed", "thu", "fri"]);
+  const [routineMinutes, setRoutineMinutes] = useState(60);
+  const [routineCardio, setRoutineCardio] = useState(true);
+  const [routineCardioMinutes, setRoutineCardioMinutes] = useState(15);
+  const [savingRoutine, setSavingRoutine] = useState(false);
   const [quickPickExerciseId, setQuickPickExerciseId] = useState<string>("");
   const [savingSession, setSavingSession] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(
@@ -289,6 +317,7 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
   const applySuggestion = (sug: TodayWorkoutSuggestion) => {
     setSessionTitle(sug.title);
     setSelectedPlanId(sug.plan_id);
+    if (sug.minutes) setDurationMinutes(sug.minutes);
     setLoggedExercises(
       sug.exercises.map(({ notes, ...ex }) => ({ ...ex, hint: notes || undefined }))
     );
@@ -307,9 +336,58 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
     }
   };
 
+  // Treino sob medida a partir do texto ("tenho 30 minutos e quero treinar só peito")
+  const generateQuick = async (text: string) => {
+    if (!text.trim()) return;
+    setLoadingSuggestion(true);
+    try {
+      const res = await api.quickWorkout({ text });
+      setSuggestion(res);
+      applySuggestion(res);
+    } catch (err: any) {
+      window.alert(`Não foi possível montar o treino: ${err.message || err}`);
+    } finally {
+      setLoadingSuggestion(false);
+    }
+  };
+
+  const loadRoutine = async () => {
+    try {
+      setRoutine(await api.getWeeklyRoutine());
+    } catch (err) {
+      console.error("Erro ao carregar rotina:", err);
+    }
+  };
+
+  const generateRoutine = async () => {
+    if (routineDays.length === 0) {
+      window.alert("Escolha pelo menos um dia da semana.");
+      return;
+    }
+    if (routine.length > 0 && !window.confirm("Gerar uma nova rotina substitui a rotina semanal atual. Continuar?")) return;
+    setSavingRoutine(true);
+    try {
+      setRoutine(
+        await api.createWeeklyRoutine({
+          days: routineDays,
+          minutes: routineMinutes,
+          include_cardio: routineCardio,
+          cardio_minutes: routineCardioMinutes,
+        })
+      );
+      await onRefresh();
+      loadSuggestion(false);
+    } catch (err: any) {
+      window.alert(`Erro ao gerar rotina: ${err.message || err}`);
+    } finally {
+      setSavingRoutine(false);
+    }
+  };
+
   // Ao abrir, já traz a sugestão do dia se o formulário estiver vazio
   useEffect(() => {
     loadSuggestion(true);
+    loadRoutine();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -736,6 +814,53 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                     ))}
                   </select>
                 )}
+              </div>
+
+              {/* Treino sob medida: tempo + grupos em texto livre */}
+              <div className={`rounded-xl border p-3 space-y-2 ${subtleSurface}`}>
+                <div className="text-xs font-extrabold flex items-center gap-1.5">
+                  <Flame className="w-3.5 h-3.5 text-[#ea4d4d]" />
+                  Treino rápido: diga quanto tempo tem e o que quer treinar
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={quickText}
+                    onChange={(e) => setQuickText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        generateQuick(quickText);
+                      }
+                    }}
+                    placeholder="Ex: tenho 30 minutos e quero treinar só peito"
+                    className={`flex-1 min-w-0 rounded-lg px-3 py-2 text-xs border ${inputSurface}`}
+                  />
+                  <button
+                    type="button"
+                    disabled={loadingSuggestion || !quickText.trim()}
+                    onClick={() => generateQuick(quickText)}
+                    className="px-4 py-2 rounded-lg bg-[#ea4d4d] hover:brightness-95 text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50 shrink-0"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Gerar treino
+                  </button>
+                </div>
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar sm:flex-wrap">
+                  {QUICK_EXAMPLES.map((ex) => (
+                    <button
+                      key={ex}
+                      type="button"
+                      onClick={() => {
+                        setQuickText(ex);
+                        generateQuick(ex);
+                      }}
+                      className="shrink-0 text-[10px] px-2.5 py-1 rounded-full border border-slate-300 dark:border-slate-700 text-slate-500 hover:border-[#ea4d4d] hover:text-[#ea4d4d]"
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Sugestão do treino de hoje (baseada no histórico) */}
@@ -1369,6 +1494,144 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
       ====================================================================== */}
       {subTab === "plans" && (
         <div className="space-y-6">
+          {/* ROTINA SEMANAL (SEGUNDA A SEXTA, COM CARDIO) */}
+          <div className={`duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="font-extrabold text-sm sm:text-base flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-[#3454d1]" />
+                  Rotina Semanal Programada
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Escolha os dias e o tempo por treino. O app monta uma ficha por dia (com cardio) e a sugestão
+                  do dia passa a seguir essa rotina.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+              <div className="lg:col-span-5">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Dias de treino</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {WEEK_DAYS.map(([code, label]) => {
+                    const on = routineDays.includes(code);
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() =>
+                          setRoutineDays((prev) => (on ? prev.filter((d) => d !== code) : [...prev, code]))
+                        }
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
+                          on ? "bg-[#3454d1] border-[#3454d1] text-white" : subtleSurface
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="lg:col-span-2">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Tempo por treino</label>
+                <select
+                  value={routineMinutes}
+                  onChange={(e) => setRoutineMinutes(Number(e.target.value))}
+                  className={`w-full rounded-lg px-3 py-2 text-xs font-bold border ${inputSurface}`}
+                >
+                  {[30, 45, 60, 75, 90].map((m) => (
+                    <option key={m} value={m}>
+                      {m} min
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="lg:col-span-3">
+                <label className="block text-[10px] font-bold uppercase text-slate-400 mb-1">Cardio</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRoutineCardio(!routineCardio)}
+                    className={`px-3 py-2 rounded-lg text-xs font-bold border ${
+                      routineCardio ? "bg-rose-500 border-rose-500 text-white" : subtleSurface
+                    }`}
+                  >
+                    {routineCardio ? "Com cardio" : "Sem cardio"}
+                  </button>
+                  {routineCardio && (
+                    <select
+                      value={routineCardioMinutes}
+                      onChange={(e) => setRoutineCardioMinutes(Number(e.target.value))}
+                      className={`flex-1 rounded-lg px-2 py-2 text-xs font-bold border ${inputSurface}`}
+                    >
+                      {[10, 15, 20, 30].map((m) => (
+                        <option key={m} value={m}>
+                          {m} min
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              </div>
+              <div className="lg:col-span-2">
+                <button
+                  type="button"
+                  disabled={savingRoutine}
+                  onClick={generateRoutine}
+                  className="w-full px-3 py-2 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white text-xs font-bold flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {savingRoutine ? "Gerando..." : routine.length ? "Gerar nova rotina" : "Gerar rotina"}
+                </button>
+              </div>
+            </div>
+
+            {routine.length > 0 && (
+              <div className="flex lg:grid lg:grid-cols-5 gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar -mx-1 px-1 lg:mx-0 lg:px-0 pb-1">
+                {routine.map((plan) => (
+                  <div
+                    key={plan.id}
+                    className={`shrink-0 w-[80%] sm:w-[45%] lg:w-auto snap-start rounded-xl border p-3 space-y-2 ${subtleSurface}`}
+                  >
+                    <div>
+                      <div className="text-[10px] font-extrabold uppercase text-[#3454d1]">
+                        {plan.scheduled_days}
+                      </div>
+                      <div className="font-bold text-xs leading-snug">{plan.title.split(" — ").slice(1).join(" — ") || plan.title}</div>
+                      <div className="text-[10px] text-slate-400">
+                        {plan.exercises.length} exercícios • {plan.estimated_duration_min} min
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      {plan.exercises.map((pe, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <ExerciseAnimation
+                            images={imagesFor({ exercise_id: pe.exercise_id, exercise_name: pe.exercise_name })}
+                            alt={pe.exercise_name}
+                            className="w-8 h-8 rounded-md"
+                          />
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-semibold leading-tight line-clamp-2">{pe.exercise_name}</div>
+                            <div className="text-[10px] text-slate-400">
+                              {pe.muscle_group === "Cardio" ? pe.reps : `${pe.sets}x${pe.reps}`}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => loadPlanIntoSessionLogger(plan)}
+                      className="w-full py-1.5 rounded-lg bg-[#17c666] text-white text-[11px] font-bold flex items-center justify-center gap-1"
+                    >
+                      <Play className="w-3 h-3" /> Treinar este
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* CARD DO AGENTE CRIADOR DE TREINOS (SMARTWORKOUT COACH IA) */}
           <form
             onSubmit={handleGenerateAIWorkout}

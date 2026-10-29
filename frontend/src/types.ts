@@ -463,6 +463,7 @@ export interface TodayWorkoutSuggestion {
   plan_id: number | null;
   muscle_groups: string;
   reason: string;
+  minutes?: number;
   trained_today: boolean;
   exercises: Array<WorkoutSessionExerciseItem & { image_urls?: string[] }>;
 }

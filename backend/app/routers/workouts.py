@@ -1,6 +1,7 @@
 import re
 from datetime import datetime, timedelta
 from typing import Any, Optional
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -1256,6 +1257,60 @@ def generate_structured_workout_plans_fallback(
     for p in created_plans:
         db.refresh(p)
     return created_plans
+
+
+class QuickWorkoutRequest(BaseModel):
+    """Pedido livre ("tenho 30 minutos e quero treinar só peito") e/ou campos diretos."""
+    text: Optional[str] = None
+    minutes: Optional[int] = Field(default=None, ge=10, le=180)
+    muscle_groups: Optional[list[str]] = None
+    include_cardio: Optional[bool] = None
+
+
+class WeeklyRoutineRequest(BaseModel):
+    days: list[str] = Field(default_factory=lambda: ["mon", "tue", "wed", "thu", "fri"])
+    minutes: int = Field(default=60, ge=15, le=180)
+    include_cardio: bool = True
+    cardio_minutes: int = Field(default=15, ge=5, le=60)
+    goal: str = "Hipertrofia"
+
+
+@router.post("/quick")
+def quick_workout(payload: QuickWorkoutRequest, db: Session = Depends(get_db)):
+    """Monta um treino que cabe no tempo pedido, só com os grupos escolhidos."""
+    from app.services.workout_builder import build_workout, parse_request
+    from app.services.workout_suggest import suggest_today
+
+    parsed = parse_request(payload.text or "")
+    minutes = payload.minutes or parsed["minutes"] or 45
+    groups = payload.muscle_groups if payload.muscle_groups is not None else parsed["muscle_groups"]
+    cardio = payload.include_cardio if payload.include_cardio is not None else parsed["include_cardio"]
+    if not groups and not cardio:
+        # Não disse o grupo: usa o grupo da vez (sugestão do dia) dentro do tempo pedido
+        groups = [g.strip() for g in suggest_today(db)["muscle_groups"].split(",") if g.strip()]
+    return build_workout(db, minutes=minutes, muscle_groups=groups, include_cardio=cardio)
+
+
+@router.get("/weekly-routine", response_model=list[WorkoutPlanOut])
+def get_weekly_routine(db: Session = Depends(get_db)):
+    from app.services.workout_builder import ROUTINE_AUTHOR
+
+    return db.query(WorkoutPlan).filter(WorkoutPlan.created_by_agent == ROUTINE_AUTHOR).order_by(WorkoutPlan.id.asc()).all()
+
+
+@router.post("/weekly-routine", response_model=list[WorkoutPlanOut])
+def create_weekly_routine(payload: WeeklyRoutineRequest, db: Session = Depends(get_db)):
+    """Cria uma ficha por dia (ex: segunda a sexta), com cardio, substituindo a rotina anterior."""
+    from app.services.workout_builder import build_weekly_routine
+
+    return build_weekly_routine(
+        db,
+        days=payload.days,
+        minutes=payload.minutes,
+        include_cardio=payload.include_cardio,
+        cardio_minutes=payload.cardio_minutes,
+        goal=payload.goal,
+    )
 
 
 @router.get("/suggest-today")
