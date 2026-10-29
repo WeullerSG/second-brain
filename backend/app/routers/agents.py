@@ -244,8 +244,21 @@ def _slugify(text: str) -> str:
     return clean or f"agent-{int(datetime.now().timestamp())}"
 
 
+DEFAULT_AGENTS_SEEDED_FLAG = "seeded_default_agents"
+
+
 def ensure_default_agents_seeded(db: Session) -> None:
-    """Popula os agentes padrão caso a tabela ainda não tenha os agentes de sistema."""
+    """Cria os agentes padrão uma única vez (na inicialização do backend).
+
+    Depois disso não recria nada: agentes que você excluir continuam excluídos
+    (use "Restaurar padrões" para trazê-los de volta).
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services.app_settings_store import get_setting, set_setting
+
+    if get_setting(db, DEFAULT_AGENTS_SEEDED_FLAG) == "1":
+        return
     existing_slugs = {row[0] for row in db.query(AgentProfile.slug).all()}
     has_any = len(existing_slugs) > 0
     added = False
@@ -271,7 +284,11 @@ def ensure_default_agents_seeded(db: Session) -> None:
             )
             added = True
     if added:
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+    set_setting(db, DEFAULT_AGENTS_SEEDED_FLAG, "1")
 
 
 @router.get("/tools")

@@ -502,8 +502,20 @@ def _slugify(text: str) -> str:
     return clean or f"exercicio-{int(datetime.now().timestamp())}"
 
 
+EXERCISE_LIBRARY_SEEDED_FLAG = "seeded_exercise_library"
+
+
 def ensure_exercise_library_seeded(db: Session) -> None:
-    """Garante que a Biblioteca de Exercícios estilo SmartWorkout esteja populada no banco."""
+    """Popula a Biblioteca de Exercícios uma única vez (na inicialização do backend).
+
+    Depois disso não recria nada: exercícios que você excluir continuam excluídos.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services.app_settings_store import get_setting, set_setting
+
+    if get_setting(db, EXERCISE_LIBRARY_SEEDED_FLAG) == "1":
+        return
     existing_slugs = {row[0] for row in db.query(WorkoutExercise.slug).all()}
     added = False
     for item in SMARTWORKOUT_EXERCISE_CATALOG:
@@ -525,7 +537,12 @@ def ensure_exercise_library_seeded(db: Session) -> None:
             )
             added = True
     if added:
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            # Outro processo inseriu ao mesmo tempo: o que importa é que a biblioteca existe
+            db.rollback()
+    set_setting(db, EXERCISE_LIBRARY_SEEDED_FLAG, "1")
 
 
 def _parse_first_int(reps_val: Any, default: int = 10) -> int:

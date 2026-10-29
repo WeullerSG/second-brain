@@ -74,10 +74,24 @@ def remove_demo_data() -> None:
         db.close()
 
 
+def seed_reference_data() -> None:
+    """Carrega a biblioteca de exercícios e os agentes padrão antes de aceitar requisições."""
+    from app.routers.agents import ensure_default_agents_seeded
+    from app.routers.workouts import ensure_exercise_library_seeded
+
+    db = SessionLocal()
+    try:
+        ensure_exercise_library_seeded(db)
+        ensure_default_agents_seeded(db)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_db()
     remove_demo_data()
+    seed_reference_data()
     yield
 
 

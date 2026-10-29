@@ -33,6 +33,8 @@ interface WorkoutsSectionProps {
   agents: AgentProfile[];
   darkMode: boolean;
   initialSubTab?: "diary" | "plans" | "library";
+  /** Agente já escolhido para gerar a ficha (vindo da aba Agentes). */
+  preferredAgentId?: number | null;
   onRefresh: () => Promise<void>;
   onOpenAgentsTab: () => void;
 }
@@ -78,6 +80,7 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
   agents,
   darkMode,
   initialSubTab,
+  preferredAgentId,
   onRefresh,
   onOpenAgentsTab,
 }) => {
@@ -154,8 +157,13 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
     [workoutAgents]
   );
   const [aiAgentId, setAiAgentId] = useState<number | null>(
-    defaultCoach?.id ?? null
+    preferredAgentId ?? defaultCoach?.id ?? null
   );
+  // Os agentes chegam depois que a tela abre: escolhe o coach assim que estiverem disponíveis
+  useEffect(() => {
+    if (preferredAgentId) setAiAgentId(preferredAgentId);
+    else setAiAgentId((current) => current ?? defaultCoach?.id ?? null);
+  }, [preferredAgentId, defaultCoach]);
   const [aiGoal, setAiGoal] = useState("Hipertrofia");
   const [aiSplit, setAiSplit] = useState("ABC");
   const [aiDays, setAiDays] = useState(4);

@@ -176,6 +176,9 @@ export default function App({ username, onLogout }: { username: string; onLogout
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [agentTools, setAgentTools] = useState<AgentToolMeta[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
+  // Atalho "Gerar treino" da aba Agentes: abre Treinos > Fichas com o agente escolhido
+  const [workoutsSubTab, setWorkoutsSubTab] = useState<"diary" | "plans" | "library" | undefined>();
+  const [workoutAgentId, setWorkoutAgentId] = useState<number | null>(null);
   const [workoutInitialSubTab, setWorkoutInitialSubTab] = useState<
     "diary" | "plans" | "library"
   >("diary");
@@ -229,54 +232,31 @@ export default function App({ username, onLogout }: { username: string; onLogout
   const [taskPriority, setTaskPriority] = useState("high");
 
   const refreshAll = async () => {
-    try {
-      const [
-        finData,
-        stmtData,
-        taskData,
-        memData,
-        docData,
-        telData,
-        ftData,
-        schedData,
-        workoutSumData,
-        workoutExData,
-        agentsData,
-        toolsData,
-      ] = await Promise.all([
-        api.getFinanceSummary(),
-        api.getStatementHistory(),
-        api.getAcademicTasks(),
-        api.getMemories({ q: memorySearch || undefined }),
-        api.getDocuments(),
-        api.getTelemetryOverview(),
-        api.getFineTuneExamples(),
-        api.getNotifications(),
-        api.getWorkoutsSummary(),
-        api.getWorkoutExercises(),
-        api.getAgents(),
-        api.getAgentTools(),
-      ]);
-      setFinance(finData);
-      setStatementHistory(stmtData);
-      setTasks(taskData);
-      setMemories(memData);
-      setDocuments(docData);
-      setTelemetry(telData);
-      setFtExamples(ftData);
-      setSchedules(schedData);
-      setWorkoutsSummary(workoutSumData);
-      setWorkoutExercises(workoutExData);
-      setAgents(agentsData);
-      setAgentTools(toolsData);
-      setSelectedAgentId((prev) => {
-        if (prev && agentsData.some((a) => a.id === prev)) return prev;
-        const def = agentsData.find((a) => a.is_default) || agentsData[0];
-        return def ? def.id : null;
-      });
-    } catch (err) {
-      console.error("Erro ao sincronizar dados com backend:", err);
-    }
+    // Cada parte carrega por conta própria: se uma falhar, as outras continuam aparecendo
+    const load = <T,>(label: string, promise: Promise<T>, apply: (data: T) => void) =>
+      promise.then(apply).catch((err) => console.error(`Erro ao carregar ${label}:`, err));
+
+    await Promise.all([
+      load("finanças", api.getFinanceSummary(), setFinance),
+      load("histórico de faturas", api.getStatementHistory(), setStatementHistory),
+      load("faculdade", api.getAcademicTasks(), setTasks),
+      load("memórias", api.getMemories({ q: memorySearch || undefined }), setMemories),
+      load("documentos", api.getDocuments(), setDocuments),
+      load("monitoramento", api.getTelemetryOverview(), setTelemetry),
+      load("dataset", api.getFineTuneExamples(), setFtExamples),
+      load("agenda", api.getNotifications(), setSchedules),
+      load("resumo de treinos", api.getWorkoutsSummary(), setWorkoutsSummary),
+      load("exercícios", api.getWorkoutExercises(), setWorkoutExercises),
+      load("ferramentas dos agentes", api.getAgentTools(), setAgentTools),
+      load("agentes", api.getAgents(), (agentsData) => {
+        setAgents(agentsData);
+        setSelectedAgentId((prev) => {
+          if (prev && agentsData.some((a) => a.id === prev)) return prev;
+          const def = agentsData.find((a) => a.is_default) || agentsData[0];
+          return def ? def.id : null;
+        });
+      }),
+    ]);
   };
 
   const requestPushPermission = async () => {
@@ -398,6 +378,14 @@ export default function App({ username, onLogout }: { username: string; onLogout
     const el = chatScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, loading, activeTab]);
+
+  // O atalho para Treinos vale só uma vez: ao sair da aba, volta ao padrão (Diário)
+  useEffect(() => {
+    if (activeTab !== "workouts") {
+      setWorkoutsSubTab(undefined);
+      setWorkoutAgentId(null);
+    }
+  }, [activeTab]);
 
   const startNewConversation = () => {
     setActiveConversationId(null);
@@ -1739,9 +1727,9 @@ export default function App({ username, onLogout }: { username: string; onLogout
                         >
                           <div
                             className="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0"
-                            style={{ backgroundColor: ag.color || "#3454d1" }}
+                            style={{ backgroundColor: ag.accent_color || "#3454d1" }}
                           >
-                            {renderAgentIcon(ag.icon, "w-3.5 h-3.5")}
+                            {renderAgentIcon(ag.avatar_icon, "w-3.5 h-3.5")}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="font-bold truncate">{ag.name}</div>
@@ -1831,9 +1819,9 @@ export default function App({ username, onLogout }: { username: string; onLogout
                     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
                       <div
                         className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-white flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 shadow-sm"
-                        style={{ backgroundColor: activeAg?.color || "#3454d1" }}
+                        style={{ backgroundColor: activeAg?.accent_color || "#3454d1" }}
                       >
-                        {activeAg ? renderAgentIcon(activeAg.icon, "w-5 h-5") : "AI"}
+                        {activeAg ? renderAgentIcon(activeAg.avatar_icon, "w-5 h-5") : "AI"}
                       </div>
                       <div className="min-w-0">
                         <div className="font-bold text-xs sm:text-sm truncate">
@@ -2147,15 +2135,12 @@ export default function App({ username, onLogout }: { username: string; onLogout
           <WorkoutsSection
             summary={workoutsSummary}
             exercises={workoutExercises}
+            agents={agents}
             darkMode={darkMode}
+            initialSubTab={workoutsSubTab}
+            preferredAgentId={workoutAgentId}
             onRefresh={refreshAll}
-            onOpenCoachInChat={(prompt) => {
-              const coachAgent = agents.find((a) => a.slug === "smartworkout-coach");
-              if (coachAgent) setSelectedAgentId(coachAgent.id);
-              setActiveTab("chat");
-              if (prompt) handleSendMessage(prompt, coachAgent?.id);
-            }}
-            onManageAgents={() => setActiveTab("agents")}
+            onOpenAgentsTab={() => setActiveTab("agents")}
           />
         )}
 
@@ -2172,7 +2157,11 @@ export default function App({ username, onLogout }: { username: string; onLogout
                 : ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"]
             }
             darkMode={darkMode}
-            selectedAgentId={selectedAgentId}
+            onOpenWorkoutGenerator={(agent) => {
+              setWorkoutAgentId(agent.id);
+              setWorkoutsSubTab("plans");
+              setActiveTab("workouts");
+            }}
             onSelectAgentForChat={(agent, initialPrompt) => {
               setSelectedAgentId(agent.id);
               setActiveTab("chat");
