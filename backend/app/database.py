@@ -33,6 +33,7 @@ def init_db() -> None:
 # Colunas criadas depois da primeira versão do banco (create_all não altera tabelas existentes)
 NEW_COLUMNS = [
     ("schedule_notifications", "reminder_offsets", "JSON"),
+    ("workout_exercises", "image_urls", "JSON"),
     ("conversations", "agent_id", "INTEGER"),
 ]
 

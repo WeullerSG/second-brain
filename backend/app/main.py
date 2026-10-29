@@ -78,11 +78,13 @@ def seed_reference_data() -> None:
     """Carrega a biblioteca de exercícios e os agentes padrão antes de aceitar requisições."""
     from app.routers.agents import ensure_default_agents_seeded
     from app.routers.workouts import ensure_exercise_library_seeded
+    from app.services.exercise_media import backfill_exercise_images
 
     db = SessionLocal()
     try:
         ensure_exercise_library_seeded(db)
         ensure_default_agents_seeded(db)
+        backfill_exercise_images(db)
     finally:
         db.close()
 

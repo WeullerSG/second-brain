@@ -11,6 +11,7 @@ import {
   Layers,
   Play,
   Plus,
+  RefreshCw,
   Search,
   Sparkles,
   Trash2,
@@ -18,14 +19,19 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import { Markdown } from "./Markdown";
+import { ExerciseAnimation } from "./ExerciseAnimation";
 import type {
   AgentProfile,
   WorkoutExercise,
   WorkoutPlan,
   WorkoutPlanExerciseItem,
+  TodayWorkoutSuggestion,
   WorkoutSessionExerciseItem,
   WorkoutsSummary,
 } from "../types";
+
+/** Linha do treino do dia na tela: guarda também a foto e a dica da sugestão (não vão para o banco). */
+type LoggerItem = WorkoutSessionExerciseItem & { hint?: string; image_urls?: string[] };
 
 interface WorkoutsSectionProps {
   summary: WorkoutsSummary | null;
@@ -97,47 +103,15 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
   // ---------- Estados do Diário de Treino (Anotar Treino do Dia) ----------
   const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [sessionDate, setSessionDate] = useState(todayIso);
-  const [sessionTitle, setSessionTitle] = useState("Treino A — Peito, Ombro e Tríceps");
+  const [sessionTitle, setSessionTitle] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
   const [durationMinutes, setDurationMinutes] = useState(60);
   const [perceivedEffort, setPerceivedEffort] = useState(8);
   const [sessionNotes, setSessionNotes] = useState("");
-  const [loggedExercises, setLoggedExercises] = useState<
-    WorkoutSessionExerciseItem[]
-  >([
-    {
-      exercise_name: "Supino Inclinado com Halteres",
-      muscle_group: "Peito",
-      equipment: "Halteres",
-      sets_count: 4,
-      reps: "10",
-      weight_kg: 30,
-    },
-    {
-      exercise_name: "Supino Reto com Barra",
-      muscle_group: "Peito",
-      equipment: "Barra",
-      sets_count: 4,
-      reps: "8",
-      weight_kg: 70,
-    },
-    {
-      exercise_name: "Elevação Lateral com Halteres",
-      muscle_group: "Ombros",
-      equipment: "Halteres",
-      sets_count: 4,
-      reps: "12",
-      weight_kg: 14,
-    },
-    {
-      exercise_name: "Tríceps na Polia com Corda (Pushdown)",
-      muscle_group: "Tríceps",
-      equipment: "Polia / Cabo",
-      sets_count: 4,
-      reps: "12",
-      weight_kg: 35,
-    },
-  ]);
+  const [loggedExercises, setLoggedExercises] = useState<LoggerItem[]>([]);
+  // Sugestão do treino de hoje calculada a partir do histórico
+  const [suggestion, setSuggestion] = useState<TodayWorkoutSuggestion | null>(null);
+  const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [quickPickExerciseId, setQuickPickExerciseId] = useState<string>("");
   const [savingSession, setSavingSession] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(
@@ -305,6 +279,40 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
     setSubTab("diary");
   };
 
+  const imagesFor = (item: { exercise_id?: number | null; exercise_name: string; image_urls?: string[] }) =>
+    item.image_urls?.length
+      ? item.image_urls
+      : exercises.find(
+          (x) => x.id === item.exercise_id || x.name.toLowerCase() === item.exercise_name.toLowerCase()
+        )?.image_urls;
+
+  const applySuggestion = (sug: TodayWorkoutSuggestion) => {
+    setSessionTitle(sug.title);
+    setSelectedPlanId(sug.plan_id);
+    setLoggedExercises(
+      sug.exercises.map(({ notes, ...ex }) => ({ ...ex, hint: notes || undefined }))
+    );
+  };
+
+  const loadSuggestion = async (apply: boolean) => {
+    setLoadingSuggestion(true);
+    try {
+      const sug = await api.suggestTodayWorkout();
+      setSuggestion(sug);
+      if (apply) applySuggestion(sug);
+    } catch (err) {
+      console.error("Erro ao sugerir treino:", err);
+    } finally {
+      setLoadingSuggestion(false);
+    }
+  };
+
+  // Ao abrir, já traz a sugestão do dia se o formulário estiver vazio
+  useEffect(() => {
+    loadSuggestion(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Adicionar exercício da Biblioteca direto no Treino do Dia
   const addExerciseToLogger = (ex: WorkoutExercise) => {
     setLoggedExercises((prev) => [
@@ -316,7 +324,8 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
         equipment: ex.equipment,
         sets_count: 4,
         reps: "10",
-        weight_kg: ex.last_weight_kg || ex.personal_record_kg || 20,
+        weight_kg: ex.last_weight_kg || ex.personal_record_kg || 0,
+        image_urls: ex.image_urls,
       },
     ]);
     setSubTab("diary");
@@ -357,11 +366,12 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
         plan_id: selectedPlanId,
         duration_minutes: Number(durationMinutes) || 60,
         perceived_effort: Number(perceivedEffort) || 8,
-        exercises_performed: loggedExercises,
+        exercises_performed: loggedExercises.map(({ hint, image_urls, ...ex }) => ex),
         notes: sessionNotes.trim() || undefined,
       });
       setSessionNotes("");
       await onRefresh();
+      loadSuggestion(false);
     } catch (err: any) {
       window.alert(`Erro ao registrar treino: ${err.message || err}`);
     } finally {
@@ -728,6 +738,50 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                 )}
               </div>
 
+              {/* Sugestão do treino de hoje (baseada no histórico) */}
+              <div className="rounded-xl border border-[#3454d1]/30 bg-[#3454d1]/5 p-3 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-xs font-extrabold text-[#3454d1] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      Sugestão para hoje{suggestion ? `: ${suggestion.title}` : ""}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {loadingSuggestion
+                        ? "Analisando seus treinos anteriores..."
+                        : suggestion
+                        ? `${suggestion.reason}${
+                            suggestion.trained_today ? " Você já treinou hoje — pode ser o treino de amanhã." : ""
+                          }`
+                        : "Baseada nos grupos que você treinou e nas cargas que usou."}
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      disabled={loadingSuggestion}
+                      onClick={() => loadSuggestion(true)}
+                      className="px-3 py-1.5 rounded-lg bg-[#3454d1] text-white text-[11px] font-bold flex items-center gap-1 disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loadingSuggestion ? "animate-spin" : ""}`} />
+                      Usar sugestão
+                    </button>
+                    {loggedExercises.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLoggedExercises([]);
+                          setSelectedPlanId(null);
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-[11px] font-bold text-slate-400"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               {/* Dados gerais da sessão */}
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
@@ -829,7 +883,12 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
               </div>
 
               {/* Lista de Exercícios do Treino do Dia */}
-              <div className="space-y-2.5 max-h-[380px] overflow-y-auto pr-1">
+              <div className="space-y-2.5 sm:max-h-[520px] sm:overflow-y-auto sm:pr-1">
+                {loggedExercises.length === 0 && (
+                  <p className={`text-xs text-slate-400 p-3 rounded-xl border ${subtleSurface}`}>
+                    Nenhum exercício ainda. Use a sugestão acima, carregue uma ficha ou adicione da biblioteca.
+                  </p>
+                )}
                 {loggedExercises.map((item, idx) => {
                   const currentPr =
                     prByExerciseName[(item.exercise_name || "").toLowerCase()] ||
@@ -843,8 +902,14 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                       className={`rounded-xl border p-3 space-y-2 ${subtleSurface}`}
                     >
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                        <div className="sm:col-span-5">
-                          <label className="block text-[10px] font-bold text-slate-400">
+                        <div className="sm:col-span-5 flex items-center gap-2.5 min-w-0">
+                          <ExerciseAnimation
+                            images={imagesFor(item)}
+                            alt={item.exercise_name}
+                            className="w-14 h-14 rounded-lg border border-slate-200 dark:border-slate-700"
+                          />
+                          <div className="flex-1 min-w-0">
+                          <label className="block text-[10px] font-bold text-slate-400 truncate">
                             Exercício #{idx + 1} ({item.muscle_group} • {item.equipment})
                           </label>
                           <input
@@ -862,6 +927,7 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                             placeholder="Nome do exercício"
                             className={`w-full rounded-lg px-2.5 py-1.5 text-xs font-bold border mt-0.5 ${inputSurface}`}
                           />
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-3 sm:col-span-6 gap-2">
@@ -943,6 +1009,13 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                           </button>
                         </div>
                       </div>
+
+                      {item.hint && (
+                        <div className="text-[11px] text-[#3454d1] px-1 flex items-start gap-1">
+                          <Sparkles className="w-3 h-3 mt-0.5 shrink-0" />
+                          <span>{item.hint}</span>
+                        </div>
+                      )}
 
                       {/* Dica de PR anterior / Novo Recorde */}
                       {(currentPr > 0 || isNewPr) && (
@@ -1909,6 +1982,11 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                 key={ex.id}
                 className={`duralux-card rounded-xl border p-4 sm:p-5 flex flex-col justify-between gap-3.5 ${cardSurface}`}
               >
+                <ExerciseAnimation
+                  images={ex.image_urls}
+                  alt={ex.name}
+                  className="w-full aspect-[4/3] rounded-lg border border-slate-200 dark:border-slate-700"
+                />
                 <div className="space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-1.5">

@@ -1,3 +1,4 @@
+import type { TodayWorkoutSuggestion } from "./types";
 import type {
   AcademicTask,
   AgentProfile,
@@ -534,6 +535,7 @@ export const api = {
     request<{ status: string }>(`/workouts/sessions/${id}`, {
       method: "DELETE",
     }),
+  suggestTodayWorkout: () => request<TodayWorkoutSuggestion>("/workouts/suggest-today"),
   generateAIWorkoutPlan: (data: AIWorkoutGenerateRequest) =>
     request<{
       status: string;

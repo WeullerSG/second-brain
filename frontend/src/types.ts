@@ -397,6 +397,7 @@ export interface WorkoutExercise {
   instructions: string;
   common_mistakes?: string | null;
   video_url?: string | null;
+  image_urls?: string[];
   is_custom: boolean;
   personal_record_kg: number;
   last_weight_kg: number;
@@ -455,6 +456,15 @@ export interface WorkoutSessionExerciseItem {
   set_details?: WorkoutSetDetail[];
   volume_kg?: number;
   notes?: string | null;
+}
+
+export interface TodayWorkoutSuggestion {
+  title: string;
+  plan_id: number | null;
+  muscle_groups: string;
+  reason: string;
+  trained_today: boolean;
+  exercises: Array<WorkoutSessionExerciseItem & { image_urls?: string[] }>;
 }
 
 export interface WorkoutSession {

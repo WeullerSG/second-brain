@@ -737,6 +737,7 @@ def list_exercises(
                 instructions=ex.instructions,
                 common_mistakes=ex.common_mistakes,
                 video_url=ex.video_url or SMARTWORKOUT_URL,
+                image_urls=ex.image_urls or [],
                 is_custom=bool(ex.is_custom),
                 personal_record_kg=float(st.get("personal_record_kg", 0.0)),
                 last_weight_kg=float(st.get("last_weight_kg", 0.0)),
@@ -770,6 +771,7 @@ def create_custom_exercise(payload: WorkoutExerciseCreate, db: Session = Depends
         instructions=payload.instructions.strip(),
         common_mistakes=payload.common_mistakes,
         video_url=payload.video_url or SMARTWORKOUT_URL,
+        image_urls=[u.strip() for u in payload.image_urls if u.strip()] or None,
         is_custom=True,
     )
     db.add(ex)
@@ -787,6 +789,7 @@ def create_custom_exercise(payload: WorkoutExerciseCreate, db: Session = Depends
         instructions=ex.instructions,
         common_mistakes=ex.common_mistakes,
         video_url=ex.video_url,
+        image_urls=ex.image_urls or [],
         is_custom=True,
         created_at=ex.created_at,
     )
@@ -1253,6 +1256,14 @@ def generate_structured_workout_plans_fallback(
     for p in created_plans:
         db.refresh(p)
     return created_plans
+
+
+@router.get("/suggest-today")
+def suggest_today_workout(db: Session = Depends(get_db)):
+    """Sugere os exercícios de hoje com base no histórico (rotação de grupos + progressão de carga)."""
+    from app.services.workout_suggest import suggest_today
+
+    return suggest_today(db)
 
 
 @router.post("/generate-ai-plan")

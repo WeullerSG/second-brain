@@ -257,6 +257,7 @@ class WorkoutExercise(Base):
     instructions = Column(Text, nullable=False)
     common_mistakes = Column(Text, nullable=True)
     video_url = Column(String(300), nullable=True)
+    image_urls = Column(JSON, nullable=True)  # fotos da execução (free-exercise-db), alternadas como animação
     is_custom = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
 
