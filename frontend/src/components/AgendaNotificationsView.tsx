@@ -6,6 +6,7 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
+  Edit3,
   GraduationCap,
   MapPin,
   Plus,
@@ -16,6 +17,8 @@ import {
 } from "lucide-react";
 import { api } from "../api";
 import type { ScheduleNotificationItem } from "../types";
+import { formatReminderOffset, getReminderOffsets } from "../reminders";
+import { ReminderPicker } from "./ReminderPicker";
 
 interface AgendaNotificationsViewProps {
   schedules: ScheduleNotificationItem[];
@@ -54,7 +57,9 @@ export const AgendaNotificationsView: React.FC<
   const [selectedDays, setSelectedDays] = useState<string[]>(["mon", "wed"]);
   const [targetDate, setTargetDate] = useState("");
   const [notifyTime, setNotifyTime] = useState("19:00");
-  const [remindBefore, setRemindBefore] = useState(30);
+  const [reminders, setReminders] = useState<number[]>([30]);
+  const [editingRemindersId, setEditingRemindersId] = useState<number | null>(null);
+  const [editingReminders, setEditingReminders] = useState<number[]>([]);
   const [locationOrLink, setLocationOrLink] = useState("");
   const [aiSchedulePrompt, setAiSchedulePrompt] = useState("");
 
@@ -93,7 +98,8 @@ export const AgendaNotificationsView: React.FC<
         scheduleType === "recurring_weekly" ? selectedDays.join(",") : null,
       target_date: scheduleType === "one_time" ? targetDate || null : null,
       notify_time: notifyTime,
-      remind_minutes_before: remindBefore,
+      remind_minutes_before: reminders[0] ?? 0,
+      reminder_offsets: reminders,
       location_or_link: locationOrLink.trim() || null,
       enabled: true,
     });
@@ -278,7 +284,9 @@ export const AgendaNotificationsView: React.FC<
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" /> {cls.notify_time}
                             </span>
-                            <span>-{cls.remind_minutes_before}min</span>
+                            <span title={getReminderOffsets(cls).map(formatReminderOffset).join(", ")}>
+                              🔔 {getReminderOffsets(cls).length}
+                            </span>
                           </div>
                           {cls.location_or_link && (
                             <div className="text-[10px] text-slate-400 flex items-center gap-1 truncate">
@@ -402,35 +410,23 @@ export const AgendaNotificationsView: React.FC<
               </div>
             )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                  Horário (HH:MM)
-                </label>
-                <input
-                  type="time"
-                  value={notifyTime}
-                  onChange={(e) => setNotifyTime(e.target.value)}
-                  className={`w-full rounded-lg px-3 py-2 border ${inputSurface}`}
-                />
-              </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                Horário (HH:MM)
+              </label>
+              <input
+                type="time"
+                value={notifyTime}
+                onChange={(e) => setNotifyTime(e.target.value)}
+                className={`w-full rounded-lg px-3 py-2 border ${inputSurface}`}
+              />
+            </div>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-400 mb-1">
-                  Avisar com Antecedência
-                </label>
-                <select
-                  value={remindBefore}
-                  onChange={(e) => setRemindBefore(Number(e.target.value))}
-                  className={`w-full rounded-lg px-3 py-2 border ${inputSurface}`}
-                >
-                  <option value={0}>Na hora exata (0 min)</option>
-                  <option value={10}>10 minutos antes</option>
-                  <option value={15}>15 minutos antes</option>
-                  <option value={30}>30 minutos antes</option>
-                  <option value={60}>1 hora antes</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-400 mb-1">
+                Avisos (quantos quiser, com qualquer antecedência)
+              </label>
+              <ReminderPicker value={reminders} onChange={setReminders} inputSurface={inputSurface} />
             </div>
 
             <div>
@@ -505,12 +501,57 @@ export const AgendaNotificationsView: React.FC<
                     <span className="text-xs font-extrabold text-[#3454d1]">
                       ⏰ {item.notify_time}
                     </span>
-                    {item.remind_minutes_before > 0 && (
-                      <span className="text-[11px] text-slate-400">
-                        (avisa {item.remind_minutes_before} min antes)
-                      </span>
-                    )}
                   </div>
+
+                  <div className="flex flex-wrap items-center gap-1">
+                    {getReminderOffsets(item).map((m) => (
+                      <span
+                        key={m}
+                        className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#3454d1]/10 text-[#3454d1]"
+                      >
+                        🔔 {formatReminderOffset(m)}
+                      </span>
+                    ))}
+                    <button
+                      onClick={() => {
+                        setEditingRemindersId(item.id);
+                        setEditingReminders(getReminderOffsets(item));
+                      }}
+                      className="text-[10px] font-bold text-slate-400 hover:text-[#3454d1] flex items-center gap-0.5 px-1"
+                    >
+                      <Edit3 className="w-3 h-3" /> Editar avisos
+                    </button>
+                  </div>
+
+                  {editingRemindersId === item.id && (
+                    <div className="pt-2 space-y-2 text-xs">
+                      <ReminderPicker
+                        value={editingReminders}
+                        onChange={setEditingReminders}
+                        inputSurface={inputSurface}
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            await api.updateNotification(item.id, {
+                              reminder_offsets: editingReminders,
+                            });
+                            setEditingRemindersId(null);
+                            await onRefresh();
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-[#17c666] text-white font-bold"
+                        >
+                          Salvar avisos
+                        </button>
+                        <button
+                          onClick={() => setEditingRemindersId(null)}
+                          className="px-3 py-1.5 text-slate-400 font-bold"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <p className="text-xs text-slate-500 dark:text-slate-300">
                     {item.message}
@@ -565,6 +606,7 @@ export const AgendaNotificationsView: React.FC<
 
                   <button
                     onClick={async () => {
+                      if (!window.confirm(`Excluir "${item.title}"?`)) return;
                       await api.deleteNotification(item.id);
                       await onRefresh();
                     }}

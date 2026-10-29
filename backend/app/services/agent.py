@@ -257,6 +257,14 @@ AGENT_TOOLS: list[dict[str, Any]] = [
                     "type": "integer",
                     "description": "Minutos de antecedência para disparar o lembrete (ex: 15, 30, 60 ou 0 para na hora exata)",
                 },
+                "reminder_offsets": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "description": (
+                        "Vários avisos, em minutos antes do evento, sem limite "
+                        "(ex: [1440, 120, 0] = 1 dia antes, 2 horas antes e na hora)"
+                    ),
+                },
                 "location_or_link": {
                     "type": "string",
                     "description": "Sala de aula, endereço ou link da chamada (Google Meet/Teams/Zoom)",
@@ -353,7 +361,7 @@ def build_system_instruction(db: Session) -> str:
     sched_lines = (
         "\n".join(
             f"- [ID:{s.id} | {s.category} | {s.schedule_type}] {s.title} às {s.notify_time} "
-            f"(Avisar {s.remind_minutes_before}min antes) | Dias: {s.days_of_week or s.target_date or 'Diário'} | Msg: {s.message}"
+            f"(Avisos: {', '.join(str(m) + 'min' for m in (s.reminder_offsets or [s.remind_minutes_before]))} antes) | Dias: {s.days_of_week or s.target_date or 'Diário'} | Msg: {s.message}"
             for s in schedules
         )
         or "Nenhuma notificação/aula agendada ainda."
@@ -594,6 +602,13 @@ def execute_tool_call(
         target_date = args.get("target_date")
         notify_time = args.get("notify_time", "08:00")
         remind_before = int(args.get("remind_minutes_before", 15))
+        offsets_arg = args.get("reminder_offsets")
+        reminder_offsets = (
+            sorted({int(o) for o in offsets_arg if int(o) >= 0}, reverse=True)
+            if offsets_arg
+            else [remind_before]
+        )
+        remind_before = reminder_offsets[0] if reminder_offsets else 0
         location_or_link = args.get("location_or_link")
 
         existing = (
@@ -609,6 +624,7 @@ def execute_tool_call(
             existing.target_date = target_date
             existing.notify_time = notify_time
             existing.remind_minutes_before = remind_before
+            existing.reminder_offsets = reminder_offsets
             existing.location_or_link = location_or_link
             existing.enabled = True
             db.commit()
@@ -627,6 +643,7 @@ def execute_tool_call(
                 target_date=target_date,
                 notify_time=notify_time,
                 remind_minutes_before=remind_before,
+                reminder_offsets=reminder_offsets,
                 location_or_link=location_or_link,
                 enabled=True,
             )
@@ -734,8 +751,21 @@ def _run_local_smart_agent_fallback(
         time_match = re.search(r"(\d{1,2})[:h](\d{2})?", msg_lower)
         notify_time = f"{int(time_match.group(1)):02d}:{int(time_match.group(2) or 0):02d}" if time_match else "19:00"
 
-        remind_match = re.search(r"(\d+)\s*min", msg_lower)
-        remind_before = int(remind_match.group(1)) if remind_match else 30
+        # Aceita vários avisos: "1 dia antes, 2 horas antes e 15 min antes"
+        unit_minutes = {"min": 1, "minuto": 1, "h": 60, "hora": 60, "dia": 1440}
+        reminder_offsets = sorted(
+            {
+                int(n) * unit_minutes[u]
+                for n, u in re.findall(r"(\d+)\s*(min(?:uto)?|hora|h|dia)s?\s*antes", msg_lower)
+            },
+            reverse=True,
+        )
+        if "na hora" in msg_lower:
+            reminder_offsets.append(0)
+        if not reminder_offsets:
+            remind_match = re.search(r"(\d+)\s*min", msg_lower)
+            reminder_offsets = [int(remind_match.group(1)) if remind_match else 30]
+        remind_before = reminder_offsets[0]
 
         day_map = {
             "segunda": "mon", "seg": "mon",
@@ -786,13 +816,14 @@ def _run_local_smart_agent_fallback(
             "target_date": target_date,
             "notify_time": notify_time,
             "remind_minutes_before": remind_before,
+            "reminder_offsets": reminder_offsets,
         }
         _, summary = execute_tool_call(db, "upsert_schedule_notification", args, rag_sources)
         tools_trace.append(ToolCallTrace(name="upsert_schedule_notification", arguments=args, result_summary=summary))
         return (
             f"🔔 **Notificação Configurada na Agenda!**\n\n"
             f"- **Título**: {title}\n"
-            f"- **Horário**: {notify_time} (alerta {remind_before} min antes)\n"
+            f"- **Horário**: {notify_time} (avisos: {', '.join(f'{m} min' for m in reminder_offsets)} antes)\n"
             f"- **Recorrência / Data**: {args['days_of_week'] or target_date or 'Diário'}\n\n"
             f"Você pode visualizar ou testar o disparo na aba **Agenda & Notificações**."
         )

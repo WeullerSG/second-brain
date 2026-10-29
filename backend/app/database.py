@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from app.config import settings
 
@@ -27,6 +27,24 @@ def init_db() -> None:
 
     from app import models  # noqa: F401
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
+
+
+# Colunas criadas depois da primeira versão do banco (create_all não altera tabelas existentes)
+NEW_COLUMNS = [
+    ("schedule_notifications", "reminder_offsets", "JSON"),
+]
+
+
+def _add_missing_columns() -> None:
+    insp = inspect(engine)
+    for table, column, col_type in NEW_COLUMNS:
+        if not insp.has_table(table):
+            continue
+        existing = {c["name"] for c in insp.get_columns(table)}
+        if column not in existing:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
 
 
 def get_db():

@@ -235,7 +235,8 @@ class ScheduleNotificationCreate(BaseModel):
     days_of_week: Optional[str] = None  # "mon,tue,wed,thu,fri"
     target_date: Optional[str] = None  # "YYYY-MM-DD"
     notify_time: str = "08:00"  # "HH:MM"
-    remind_minutes_before: int = 15
+    remind_minutes_before: int = Field(default=15, ge=0)
+    reminder_offsets: Optional[list[int]] = None  # minutos antes de cada aviso
     location_or_link: Optional[str] = None
     enabled: bool = True
 
@@ -248,7 +249,8 @@ class ScheduleNotificationUpdate(BaseModel):
     days_of_week: Optional[str] = None
     target_date: Optional[str] = None
     notify_time: Optional[str] = None
-    remind_minutes_before: Optional[int] = None
+    remind_minutes_before: Optional[int] = Field(default=None, ge=0)
+    reminder_offsets: Optional[list[int]] = None
     location_or_link: Optional[str] = None
     enabled: Optional[bool] = None
     last_triggered_at: Optional[str] = None

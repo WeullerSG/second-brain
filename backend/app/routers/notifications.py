@@ -24,6 +24,22 @@ WEEKDAY_MAP = {
 }
 
 
+def _normalize_offsets(offsets: Optional[list[int]]) -> Optional[list[int]]:
+    """Remove negativos e duplicados e ordena do aviso mais cedo para o mais tarde."""
+    if offsets is None:
+        return None
+    return sorted({int(o) for o in offsets if int(o) >= 0}, reverse=True)
+
+
+def _apply_offsets(item: ScheduleNotification, offsets: Optional[list[int]]) -> None:
+    clean = _normalize_offsets(offsets)
+    if clean is None:
+        return
+    item.reminder_offsets = clean
+    # Mantém o campo antigo com o primeiro aviso (compatibilidade)
+    item.remind_minutes_before = clean[0] if clean else 0
+
+
 @router.get("", response_model=list[ScheduleNotificationOut])
 def list_notifications(
     category: Optional[str] = None,
@@ -79,7 +95,10 @@ def create_notification(
     payload: ScheduleNotificationCreate,
     db: Session = Depends(get_db),
 ):
-    item = ScheduleNotification(**payload.model_dump())
+    data = payload.model_dump()
+    offsets = data.pop("reminder_offsets", None)
+    item = ScheduleNotification(**data)
+    _apply_offsets(item, offsets if offsets is not None else [payload.remind_minutes_before])
     db.add(item)
     db.commit()
     db.refresh(item)
@@ -99,8 +118,14 @@ def update_notification(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    offsets = data.pop("reminder_offsets", None)
+    for field, value in data.items():
         setattr(item, field, value)
+    if offsets is not None:
+        _apply_offsets(item, offsets)
+    elif "remind_minutes_before" in data:
+        _apply_offsets(item, [data["remind_minutes_before"]])
     db.commit()
     db.refresh(item)
     return item

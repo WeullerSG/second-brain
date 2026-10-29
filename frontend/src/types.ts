@@ -291,6 +291,7 @@ export interface ScheduleNotificationItem {
   target_date?: string | null; // "YYYY-MM-DD"
   notify_time: string; // "HH:MM"
   remind_minutes_before: number;
+  reminder_offsets?: number[] | null; // minutos antes de cada aviso
   location_or_link?: string | null;
   enabled: boolean;
   last_triggered_at?: string | null;

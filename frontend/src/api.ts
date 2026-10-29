@@ -315,6 +315,7 @@ export const api = {
     target_date?: string | null;
     notify_time: string;
     remind_minutes_before: number;
+    reminder_offsets?: number[];
     location_or_link?: string | null;
     enabled?: boolean;
   }) =>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowUpRight,
@@ -36,6 +36,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { api } from "./api";
+import { formatReminderOffset, getDueReminders } from "./reminders";
 import { AgendaNotificationsView } from "./components/AgendaNotificationsView";
 import { CurrentFinancesSection } from "./components/CurrentFinancesSection";
 import { MemoryDonutChart, PaymentAndUsageChart } from "./components/DuraluxCharts";
@@ -142,6 +143,7 @@ export default function App() {
       ? Notification.permission
       : "unsupported"
   );
+  const firedReminders = useRef<Set<string>>(new Set());
   const [activeToastAlert, setActiveToastAlert] = useState<{
     title: string;
     message: string;
@@ -288,62 +290,23 @@ export default function App() {
     }
   };
 
-  // Verificador automático em background (a cada 20s) para disparar notificações de Aulas e Entrevistas no horário programado
+  // Verificador automático em background (a cada 20s): dispara cada aviso
+  // (ex: 1 dia antes, 1h antes, na hora) no minuto certo, uma única vez.
   useEffect(() => {
-    const weekdayCodes = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
     const timer = setInterval(() => {
-      const now = new Date();
-      const todayDate = now.toISOString().slice(0, 10);
-      const todayDayCode = weekdayCodes[now.getDay()];
-
-      schedules.forEach((sched) => {
-        if (!sched.enabled) return;
-
-        // Verifica se hoje é o dia do evento
-        let matchesDay = false;
-        if (sched.schedule_type === "daily") {
-          matchesDay = true;
-        } else if (
-          sched.schedule_type === "one_time" &&
-          sched.target_date === todayDate
-        ) {
-          matchesDay = true;
-        } else if (
-          sched.schedule_type === "recurring_weekly" &&
-          sched.days_of_week
-        ) {
-          const days = sched.days_of_week
-            .toLowerCase()
-            .split(",")
-            .map((d) => d.trim());
-          if (days.includes(todayDayCode)) {
-            matchesDay = true;
-          }
-        }
-        if (!matchesDay) return;
-
-        // Calcula o minuto exato de disparo (notify_time menos remind_minutes_before)
-        const [hh, mm] = (sched.notify_time || "08:00").split(":").map(Number);
-        const eventMinutes = hh * 60 + mm;
-        const triggerMinutes = eventMinutes - (sched.remind_minutes_before || 0);
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        const triggerStamp = `${todayDate}_${currentMinutes}`;
-
-        if (
-          currentMinutes === triggerMinutes &&
-          sched.last_triggered_at !== triggerStamp
-        ) {
-          fireBrowserAndToastNotification(
-            `🔔 ${sched.title}`,
-            sched.message,
-            sched.notify_time
-          );
-          api
-            .updateNotification(sched.id, { last_triggered_at: triggerStamp })
-            .then(() => refreshAll())
-            .catch(() => {});
-        }
-      });
+      for (const due of getDueReminders(schedules, new Date())) {
+        if (due.item.last_triggered_at === due.stamp || firedReminders.current.has(due.stamp)) continue;
+        firedReminders.current.add(due.stamp);
+        const whenLabel =
+          due.offset === 0
+            ? `agora (${due.item.notify_time})`
+            : `${formatReminderOffset(due.offset).replace(" antes", "")} • ${due.eventDate.split("-").reverse().join("/")} às ${due.item.notify_time}`;
+        fireBrowserAndToastNotification(`🔔 ${due.item.title}`, `${due.item.message} (${whenLabel})`, due.item.notify_time);
+        api
+          .updateNotification(due.item.id, { last_triggered_at: due.stamp })
+          .then(() => refreshAll())
+          .catch(() => {});
+      }
     }, 20000);
 
     return () => clearInterval(timer);

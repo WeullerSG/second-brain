@@ -170,6 +170,9 @@ class ScheduleNotification(Base):
     target_date = Column(String(32), nullable=True)  # YYYY-MM-DD (para entrevistas / eventos únicos)
     notify_time = Column(String(16), nullable=False, default="08:00")  # HH:MM (ex: "07:30", "18:30")
     remind_minutes_before = Column(Integer, default=15)  # Quantos minutos antes avisar (0 = na hora exata)
+    # Vários avisos, em minutos antes do evento (ex: [1440, 60, 0] = 1 dia antes, 1h antes e na hora).
+    # Quando vazio, vale só remind_minutes_before.
+    reminder_offsets = Column(JSON, nullable=True)
     location_or_link = Column(String(240), nullable=True)  # Sala de aula, link do Google Meet/Teams, etc.
     enabled = Column(Boolean, default=True)
     last_triggered_at = Column(String(40), nullable=True)
