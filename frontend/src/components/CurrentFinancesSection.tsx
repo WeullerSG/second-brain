@@ -508,32 +508,32 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
       {/* =====================================================================
           4 KPI CARDS PRINCIPAIS (MEU SALDO ATUAL, GASTO NO MÊS, PARCELADOS, PREVISÃO DO SALÁRIO)
       ====================================================================== */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-5">
         {/* Card 1: Meu Saldo Atual */}
-        <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-full bg-[#3454d1]/15 text-[#3454d1] flex items-center justify-center shrink-0">
+        <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
+          <div className="flex items-start justify-between gap-3 min-w-0">
+            <div className="flex items-center gap-3.5 min-w-0">
+              <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#3454d1]/15 text-[#3454d1] items-center justify-center shrink-0">
                 <Wallet className="w-5 h-5" />
               </div>
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 leading-snug">
                   Meu Saldo Atual em Conta
                 </div>
-                <div className="text-2xl font-extrabold text-[#3454d1] mt-0.5">
+                <div className="text-lg sm:text-2xl font-extrabold text-[#3454d1] mt-0.5">
                   R$ {formatBRL(sf.current_checking_balance)}
                 </div>
               </div>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-xs space-y-1">
-            <div className="flex justify-between">
+          <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-[11px] sm:text-xs space-y-1.5 sm:space-y-1">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Limite Disponível Cartões:</span>
               <span className="font-bold text-[#17c666]">
                 R$ {formatBRL(sf.total_credit_available)}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Limite em Uso (Próx. Fatura):</span>
               <span className="font-bold text-[#ffa21d]">
                 R$ {formatBRL(sf.total_credit_used)}
@@ -543,28 +543,28 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
         </div>
 
         {/* Card 2: O Que Já Gastei Esse Mês */}
-        <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-full bg-[#ea4d4d]/15 text-[#ea4d4d] flex items-center justify-center shrink-0">
+        <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#ea4d4d]/15 text-[#ea4d4d] items-center justify-center shrink-0">
               <CreditCard className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 leading-snug">
                 O Que Já Gastei ({cm.month_label})
               </div>
-              <div className="text-2xl font-extrabold text-[#ea4d4d] mt-0.5">
+              <div className="text-lg sm:text-2xl font-extrabold text-[#ea4d4d] mt-0.5">
                 R$ {formatBRL(cm.total_spent_this_month)}
               </div>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-xs space-y-1">
-            <div className="flex justify-between">
+          <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-[11px] sm:text-xs space-y-1.5 sm:space-y-1">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Faturas de Cartão Pagas:</span>
               <span className="font-bold">
                 R$ {formatBRL(cm.card_bills_paid_this_month)}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Contas Fixas & Pix no Mês:</span>
               <span className="font-bold">
                 R$ {formatBRL(cm.direct_expenses_this_month)}
@@ -574,22 +574,22 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
         </div>
 
         {/* Card 3: O Que Tem Parcelado & Próx. Fatura */}
-        <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-full bg-[#ffa21d]/15 text-[#ffa21d] flex items-center justify-center shrink-0">
+        <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#ffa21d]/15 text-[#ffa21d] items-center justify-center shrink-0">
               <Layers className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 leading-snug">
                 Parcelado + Cartão p/ {sf.next_month_label}
               </div>
-              <div className="text-2xl font-extrabold text-[#ffa21d] mt-0.5">
+              <div className="text-lg sm:text-2xl font-extrabold text-[#ffa21d] mt-0.5">
                 R$ {formatBRL(sf.next_month_cards_and_installments)}
               </div>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-xs space-y-1">
-            <div className="flex justify-between">
+          <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-[11px] sm:text-xs space-y-1.5 sm:space-y-1">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">
                 Compras Parceladas ({instSummary.active_count}):
               </span>
@@ -597,7 +597,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                 R$ {formatBRL(sf.next_month_installments_total)}/mês
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Cartão Acumulado:</span>
               <span className="font-bold">
                 R$ {formatBRL(sf.next_month_card_accumulated)}
@@ -607,17 +607,17 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
         </div>
 
         {/* Card 4: Previsão de Quanto Vai Sobrar do Salário */}
-        <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
-          <div className="flex items-center gap-3.5">
-            <div className="w-11 h-11 rounded-full bg-[#17c666]/15 text-[#17c666] flex items-center justify-center shrink-0">
+        <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#17c666]/15 text-[#17c666] items-center justify-center shrink-0">
               <TrendingUp className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400 leading-snug">
                 Sobra do Salário ({cm.month_label})
               </div>
               <div
-                className={`text-2xl font-extrabold mt-0.5 ${
+                className={`text-lg sm:text-2xl font-extrabold mt-0.5 ${
                   currentMonthLeftover < 0 ? "text-[#ea4d4d]" : "text-[#17c666]"
                 }`}
               >
@@ -625,20 +625,20 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               </div>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-xs space-y-1">
-            <div className="flex justify-between">
+          <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 text-[11px] sm:text-xs space-y-1.5 sm:space-y-1">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Gasto lançado no mês:</span>
               <span className="font-bold text-[#ea4d4d]">
                 - R$ {formatBRL(cm.total_spent_this_month)}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Previsão p/ {sf.next_month_label}:</span>
               <span className="font-bold text-[#17c666]">
                 R$ {formatBRL(sf.projected_salary_leftover)}
               </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex flex-col sm:flex-row sm:justify-between">
               <span className="text-slate-400">Salário Base Mensal:</span>
               <span className="font-bold">R$ {formatBRL(sf.monthly_salary)}</span>
             </div>
@@ -769,7 +769,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
 
           {/* Demonstrativo passo a passo da sobra do salário */}
           <div className="space-y-2.5 text-xs">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2.5 px-3 rounded-lg bg-[#17c666]/10 border border-[#17c666]/20">
+            <div className="flex flex-row items-center justify-between gap-3 py-2.5 px-3 rounded-lg bg-[#17c666]/10 border border-[#17c666]/20">
               <span className="font-bold text-[#17c666]">
                 (+) Salário Mensal
               </span>
@@ -778,7 +778,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2.5 px-3 rounded-lg border border-slate-200/70 dark:border-slate-800">
+            <div className="flex flex-row items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-slate-200/70 dark:border-slate-800">
               <div className="min-w-0">
                 <div className="font-bold">
                   (-) Compras Parceladas Anotadas da Fatura ({sf.next_month_label})
@@ -792,7 +792,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2.5 px-3 rounded-lg border border-slate-200/70 dark:border-slate-800">
+            <div className="flex flex-row items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-slate-200/70 dark:border-slate-800">
               <div className="min-w-0">
                 <div className="font-bold">
                   (-) Gastos no Cartão já Acumulados para a Próxima Fatura
@@ -806,7 +806,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2.5 px-3 rounded-lg bg-[#3454d1]/10 border border-[#3454d1]/20">
+            <div className="flex flex-row items-center justify-between gap-3 py-2.5 px-3 rounded-lg bg-[#3454d1]/10 border border-[#3454d1]/20">
               <span className="font-bold text-[#3454d1]">
                 (=) Sobra do Salário após quitar Parcelas e Cartões já lançados
               </span>
@@ -815,7 +815,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-2.5 px-3 rounded-lg border border-slate-200/70 dark:border-slate-800">
+            <div className="flex flex-row items-center justify-between gap-3 py-2.5 px-3 rounded-lg border border-slate-200/70 dark:border-slate-800">
               <div className="min-w-0">
                 <div className="font-bold">
                   (-) Contas Fixas Mensais Previstas ({sf.next_month_label})
@@ -829,7 +829,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#17c666]/20 to-[#3dc7be]/15 border-2 border-[#17c666]/40">
+            <div className="flex flex-row items-center justify-between gap-3 py-3.5 px-4 rounded-xl bg-gradient-to-r from-[#17c666]/20 to-[#3dc7be]/15 border-2 border-[#17c666]/40">
               <div className="min-w-0">
                 <div className="font-extrabold text-xs sm:text-sm text-[#17c666]">
                   (=) PREVISÃO DE QUANTO VAI SOBRAR DO SEU SALÁRIO
@@ -842,7 +842,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                   livres para outros gastos no mês!
                 </div>
               </div>
-              <span className="font-extrabold text-xl text-[#17c666] whitespace-nowrap shrink-0">
+              <span className="font-extrabold text-lg sm:text-xl text-[#17c666] whitespace-nowrap shrink-0">
                 R$ {formatBRL(sf.projected_salary_leftover)}
               </span>
             </div>
@@ -1148,7 +1148,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Coluna Esquerda (5 cols): Compras Parceladas Anotadas da Fatura */}
         <div
-          className={`lg:col-span-5 duralux-card rounded-xl border p-6 space-y-4 ${cardSurface}`}
+          className={`lg:col-span-5 duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}
         >
           <div className="flex items-center justify-between">
             <div>
@@ -1189,9 +1189,9 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                     className={`rounded-xl border p-4 space-y-3 ${subtleSurface}`}
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-sm">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="font-extrabold text-sm break-words">
                             {inst.title}
                           </span>
                           {inst.category === "financiamento" && (
@@ -1285,7 +1285,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
 
                     {/* Progresso das parcelas */}
                     <div className="space-y-1">
-                      <div className="flex justify-between text-[11px]">
+                      <div className="flex flex-col sm:flex-row sm:justify-between gap-0.5 text-[11px]">
                         <span className="text-slate-400">
                           Pagas:{" "}
                           <strong className="text-[#17c666]">
@@ -1347,7 +1347,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
 
         {/* Coluna Direita (7 cols): Registrado Para Vir nos Próximos Meses */}
         <div
-          className={`lg:col-span-7 duralux-card rounded-xl border p-6 space-y-4 ${cardSurface}`}
+          className={`lg:col-span-7 duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}
         >
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -1363,7 +1363,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             </div>
 
             {/* Seletor de Mês Futuro */}
-            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
+            <div className="hidden sm:flex flex-wrap gap-1.5 max-h-24 overflow-y-auto pr-1">
               {upcomingMonths.map((um, idx) => (
                 <button
                   key={um.month_key}
@@ -1383,12 +1383,12 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
           </div>
 
           {/* Cards de resumo dos próximos meses lado a lado */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-h-[290px] overflow-y-auto pr-1">
+          <div className="flex sm:grid sm:grid-cols-3 gap-3 overflow-x-auto sm:overflow-x-visible snap-x snap-mandatory pb-1 -mx-1 px-1 sm:mx-0 sm:px-0 sm:max-h-[290px] sm:overflow-y-auto sm:pr-1">
             {upcomingMonths.map((um, idx) => (
               <div
                 key={um.month_key}
                 onClick={() => setSelectedUpcomingMonthIdx(idx)}
-                className={`cursor-pointer rounded-xl border p-3.5 transition-all ${
+                className={`cursor-pointer rounded-xl border p-3.5 transition-all shrink-0 w-[78%] sm:w-auto snap-start ${
                   selectedUpcomingMonthIdx === idx
                     ? "border-[#3454d1] bg-[#3454d1]/5"
                     : subtleSurface
@@ -1435,7 +1435,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
           {/* Lista detalhada dos lançamentos registrados para o mês futuro selecionado */}
           {activeUpcomingMonth && (
             <div className="space-y-2.5 pt-2">
-              <div className="flex items-center justify-between text-xs font-bold">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-bold">
                 <span>
                   Lançamentos & Parcelas Registrados para{" "}
                   <span className="text-[#3454d1]">
@@ -1449,7 +1449,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
                 </span>
               </div>
 
-              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+              <div className="space-y-2 sm:max-h-[300px] sm:overflow-y-auto sm:pr-1">
                 {activeUpcomingMonth.items.length === 0 ? (
                   <div
                     className={`p-4 rounded-xl border text-xs text-slate-400 ${subtleSurface}`}
@@ -1783,7 +1783,7 @@ export const CurrentFinancesSection: React.FC<CurrentFinancesSectionProps> = ({
             </div>
           </div>
         ) : (
-          <div className="space-y-2.5 max-h-[460px] overflow-y-auto">
+          <div className="space-y-2.5 sm:max-h-[460px] sm:overflow-y-auto">
             {(monthSpendView === "consolidated" ? cm.items : finance.records).map(
               (rec) =>
                 editingRecordId === rec.id ? (

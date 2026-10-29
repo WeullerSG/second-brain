@@ -41,6 +41,7 @@ import { AgendaNotificationsView } from "./components/AgendaNotificationsView";
 import { CurrentFinancesSection } from "./components/CurrentFinancesSection";
 import { MemoryDonutChart, PaymentAndUsageChart } from "./components/DuraluxCharts";
 import { StatementHistorySection } from "./components/StatementHistorySection";
+import { Markdown } from "./components/Markdown";
 import type {
   AcademicTask,
   ConversationDetail,
@@ -100,7 +101,25 @@ function formatBytes(bytes: number): string {
 
 export default function App() {
   // Duralux Skin State (Light Mode by default, like duralux-react-dashboard.vercel.app, with Dark Skin toggle)
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem("sb_dark_mode");
+      if (saved !== null) return saved === "1";
+    } catch {
+      // armazenamento indisponível
+    }
+    return typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    document.documentElement.style.colorScheme = darkMode ? "dark" : "light";
+    try {
+      localStorage.setItem("sb_dark_mode", darkMode ? "1" : "0");
+    } catch {
+      // armazenamento indisponível
+    }
+  }, [darkMode]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>("overview");
@@ -144,6 +163,7 @@ export default function App() {
       : "unsupported"
   );
   const firedReminders = useRef<Set<string>>(new Set());
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
   const [activeToastAlert, setActiveToastAlert] = useState<{
     title: string;
     message: string;
@@ -331,6 +351,12 @@ export default function App() {
       })
       .catch((err) => console.error("Erro ao carregar configurações:", err));
   }, []);
+
+  // Mantém o chat rolado até a última mensagem
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, loading, activeTab]);
 
   const startNewConversation = () => {
     setActiveConversationId(null);
@@ -560,7 +586,7 @@ export default function App() {
   const pendingTasksCount = tasks.filter((t) => t.status !== "done").length;
   const doneTasksCount = tasks.filter((t) => t.status === "done").length;
   const tasksProgressPct =
-    tasks.length > 0 ? Math.round((doneTasksCount / tasks.length) * 100) : 65;
+    tasks.length > 0 ? Math.round((doneTasksCount / tasks.length) * 100) : 0;
 
   const tabTitles: Record<ActiveTab, { title: string; section: string }> = {
     overview: { title: "Dashboard Geral", section: "Visão Geral CRM & Vida" },
@@ -925,8 +951,8 @@ export default function App() {
               <div className="w-7 h-7 rounded-lg bg-[#3454d1] flex items-center justify-center text-white font-extrabold text-xs shrink-0">
                 B
               </div>
-              <span className="font-extrabold text-xs tracking-wider uppercase truncate">
-                SECOND<span className="text-[#3454d1]">BRAIN</span>
+              <span className="font-extrabold text-xs tracking-wider uppercase whitespace-nowrap">
+                SECOND <span className="text-[#3454d1]">BRAIN</span>
               </span>
             </div>
 
@@ -1004,7 +1030,7 @@ export default function App() {
             <button
               onClick={refreshAll}
               title="Sincronizar Dados"
-              className={`p-2 rounded-lg border transition-colors ${
+              className={`hidden sm:block p-2 rounded-lg border transition-colors ${
                 darkMode
                   ? "border-slate-700 bg-slate-800 text-slate-300"
                   : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
@@ -1031,7 +1057,7 @@ export default function App() {
 
             {/* User Profile Chip */}
             <div
-              className={`flex items-center gap-2 pl-2 border-l ${
+              className={`hidden sm:flex items-center gap-2 pl-2 border-l ${
                 darkMode ? "border-slate-800" : "border-slate-200"
               }`}
             >
@@ -1076,7 +1102,7 @@ export default function App() {
           <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               onClick={() => setActiveTab("memory")}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+              className={`hidden sm:flex px-2.5 sm:px-3 py-1.5 rounded-lg border text-[11px] sm:text-xs font-semibold items-center gap-1.5 transition-colors ${
                 darkMode
                   ? "border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200"
                   : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
@@ -1101,31 +1127,31 @@ export default function App() {
         {activeTab === "overview" && (
           <div className="p-4 md:p-6 max-w-[1440px] w-full mx-auto space-y-6">
             {/* 4 DURALUX SIGNATURE KPI CARDS WITH PROGRESS BARS */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-5">
               {/* KPI 1: Meu Saldo Atual & Limite Disponível */}
-              <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
+              <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-full bg-[#3454d1]/10 text-[#3454d1] flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#3454d1]/10 text-[#3454d1] items-center justify-center shrink-0">
                       <Wallet className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xl font-extrabold tracking-tight">
+                      <div className="text-base sm:text-xl font-extrabold tracking-tight leading-tight">
                         R${" "}
                         {(finance?.total_balance ?? 0).toLocaleString("pt-BR", {
                           minimumFractionDigits: 2,
                         })}
                       </div>
-                      <div className="text-xs font-semibold text-slate-400">
+                      <div className="text-[11px] sm:text-xs font-semibold text-slate-400 leading-snug">
                         Meu Saldo Atual em Conta
                       </div>
                     </div>
                   </div>
-                  <MoreVertical className="w-4 h-4 text-slate-400" />
+                  <MoreVertical className="hidden sm:block w-4 h-4 text-slate-400" />
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                <div className="mt-3 sm:mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 text-[11px] sm:text-xs mb-1.5">
                     <span className="text-slate-400 font-medium">
                       Limite Cartões Disponível
                     </span>
@@ -1141,21 +1167,29 @@ export default function App() {
                   <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-[#3454d1] rounded-full"
-                      style={{ width: "90%" }}
+                      style={{
+                        width: `${
+                          finance?.total_credit_limit
+                            ? Math.round(
+                                ((finance.total_credit_available ?? 0) / finance.total_credit_limit) * 100
+                              )
+                            : 0
+                        }%`,
+                      }}
                     />
                   </div>
                 </div>
               </div>
 
               {/* KPI 2: Previsão de Quanto Vai Sobrar do Salário */}
-              <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
+              <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-full bg-[#17c666]/15 text-[#17c666] flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#17c666]/15 text-[#17c666] items-center justify-center shrink-0">
                       <CreditCard className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xl font-extrabold tracking-tight text-[#17c666]">
+                      <div className="text-base sm:text-xl font-extrabold tracking-tight leading-tight text-[#17c666]">
                         R${" "}
                         {(
                           finance?.salary_forecast?.current_month_leftover ?? 0
@@ -1163,17 +1197,17 @@ export default function App() {
                           minimumFractionDigits: 2,
                         })}
                       </div>
-                      <div className="text-xs font-semibold text-slate-400">
+                      <div className="text-[11px] sm:text-xs font-semibold text-slate-400 leading-snug">
                         Sobra do Salário no Mês (R${" "}
                         {(finance?.monthly_salary ?? 0).toFixed(0)})
                       </div>
                     </div>
                   </div>
-                  <MoreVertical className="w-4 h-4 text-slate-400" />
+                  <MoreVertical className="hidden sm:block w-4 h-4 text-slate-400" />
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                <div className="mt-3 sm:mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 text-[11px] sm:text-xs mb-1.5">
                     <span className="text-slate-400 font-medium">
                       Parcelas + Cartão p/ Próx. Mês
                     </span>
@@ -1201,26 +1235,26 @@ export default function App() {
               </div>
 
               {/* KPI 3: Atividades da Faculdade */}
-              <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
+              <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-full bg-[#17c666]/15 text-[#17c666] flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#17c666]/15 text-[#17c666] items-center justify-center shrink-0">
                       <GraduationCap className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xl font-extrabold tracking-tight">
+                      <div className="text-base sm:text-xl font-extrabold tracking-tight leading-tight">
                         {pendingTasksCount} Pendentes
                       </div>
-                      <div className="text-xs font-semibold text-slate-400">
+                      <div className="text-[11px] sm:text-xs font-semibold text-slate-400 leading-snug">
                         Provas & Projetos Faculdade
                       </div>
                     </div>
                   </div>
-                  <MoreVertical className="w-4 h-4 text-slate-400" />
+                  <MoreVertical className="hidden sm:block w-4 h-4 text-slate-400" />
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                <div className="mt-3 sm:mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 text-[11px] sm:text-xs mb-1.5">
                     <span className="text-slate-400 font-medium">
                       Taxa de Conclusão do Semestre
                     </span>
@@ -1238,27 +1272,27 @@ export default function App() {
               </div>
 
               {/* KPI 4: Memória Core & Arquivos RAG */}
-              <div className={`duralux-card rounded-xl border p-5 ${cardSurface}`}>
+              <div className={`duralux-card rounded-xl border p-3.5 sm:p-5 ${cardSurface}`}>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-11 h-11 rounded-full bg-[#ea4d4d]/15 text-[#ea4d4d] flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-3.5 min-w-0">
+                    <div className="hidden sm:flex w-11 h-11 rounded-full bg-[#ea4d4d]/15 text-[#ea4d4d] items-center justify-center shrink-0">
                       <Brain className="w-5 h-5" />
                     </div>
                     <div>
-                      <div className="text-xl font-extrabold tracking-tight">
+                      <div className="text-base sm:text-xl font-extrabold tracking-tight leading-tight">
                         {memories.length} Fatos /{" "}
                         {telemetry?.memory_stats.total_files_uploaded ?? 0} Arqs
                       </div>
-                      <div className="text-xs font-semibold text-slate-400">
+                      <div className="text-[11px] sm:text-xs font-semibold text-slate-400 leading-snug">
                         Memória Core & Vetores RAG
                       </div>
                     </div>
                   </div>
-                  <MoreVertical className="w-4 h-4 text-slate-400" />
+                  <MoreVertical className="hidden sm:block w-4 h-4 text-slate-400" />
                 </div>
 
-                <div className="mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
+                <div className="mt-3 sm:mt-5 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-0.5 text-[11px] sm:text-xs mb-1.5">
                     <span className="text-slate-400 font-medium">
                       Espaço de Memória ({formatBytes(telemetry?.memory_stats.db_disk_bytes ?? 0)})
                     </span>
@@ -1269,7 +1303,9 @@ export default function App() {
                   <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-[#ea4d4d] rounded-full"
-                      style={{ width: "72%" }}
+                      style={{
+                        width: `${Math.min(100, (telemetry?.memory_stats.total_rag_chunks ?? 0) / 5)}%`,
+                      }}
                     />
                   </div>
                 </div>
@@ -1305,8 +1341,8 @@ export default function App() {
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ex: 'Gastei R$ 82 no mercado no cartão Nubank' ou 'Tenho prova de Banco de Dados dia 22/11'..."
-                  className={`flex-1 rounded-lg px-3.5 py-2 text-xs border focus:outline-none focus:border-[#3454d1] ${inputSurface}`}
+                  placeholder="Ex: 'Gastei R$ 82 no mercado' ou 'Prova dia 22/11'..."
+                  className={`flex-1 min-w-0 rounded-lg px-3.5 py-2 text-xs border focus:outline-none focus:border-[#3454d1] ${inputSurface}`}
                 />
                 <button
                   type="submit"
@@ -1544,9 +1580,9 @@ export default function App() {
             VIEW 2: GEMINI CHAT AGENT (DURALUX APPS > CHAT LAYOUT)
         ==================================================================== */}
         {activeTab === "chat" && (
-          <div className="p-3 sm:p-4 md:p-6 max-w-[1440px] w-full mx-auto flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6">
+          <div className="p-3 sm:p-4 md:p-6 max-w-[1440px] w-full mx-auto flex flex-col lg:flex-row gap-3 lg:gap-6 h-[calc(100dvh-201px)] md:h-auto md:flex-1">
             {/* Barra Horizontal de Comandos Rápidos no Mobile (< lg) */}
-            <div className="lg:hidden flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <div className="lg:hidden shrink-0 flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
               {[
                 "Qual o valor do meu salário?",
                 "Quanto vai sobrar do meu salário?",
@@ -1565,7 +1601,7 @@ export default function App() {
             </div>
 
             {/* Conversas salvas no mobile (< lg) */}
-            <div className="lg:hidden flex items-center gap-2">
+            <div className="lg:hidden shrink-0 flex items-center gap-2">
               <button
                 onClick={() => setShowConversationsMobile(!showConversationsMobile)}
                 className={`flex-1 text-xs font-bold px-3 py-2 rounded-lg border flex items-center justify-between ${cardSurface}`}
@@ -1655,7 +1691,7 @@ export default function App() {
             </div>
 
             {/* Área Principal de Mensagens Duralux Chat */}
-            <div className={`flex-1 duralux-card rounded-xl border flex flex-col overflow-hidden ${cardSurface}`}>
+            <div className={`flex-1 min-h-0 duralux-card rounded-xl border flex flex-col overflow-hidden ${cardSurface}`}>
               <div
                 className={`px-4 sm:px-6 py-3.5 sm:py-4 border-b flex items-center justify-between gap-2 ${
                   darkMode ? "border-slate-800" : "border-slate-100"
@@ -1677,7 +1713,10 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex-1 p-3.5 sm:p-5 overflow-y-auto space-y-4 min-h-[50vh] max-h-[64vh]">
+              <div
+                ref={chatScrollRef}
+                className="flex-1 min-h-0 p-3 sm:p-5 overflow-y-auto space-y-4 md:min-h-[50vh] lg:max-h-[64vh]"
+              >
                 {messages.map((m) => (
                   <div
                     key={m.id}
@@ -1686,7 +1725,7 @@ export default function App() {
                     }`}
                   >
                     <div
-                      className={`max-w-[92%] sm:max-w-3xl rounded-2xl px-3.5 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                      className={`max-w-[92%] sm:max-w-3xl rounded-2xl px-3.5 sm:px-4 py-3 sm:py-3.5 text-xs sm:text-sm leading-relaxed break-words ${
                         m.role === "user"
                           ? "bg-[#3454d1] text-white shadow-sm"
                           : darkMode
@@ -1694,7 +1733,11 @@ export default function App() {
                           : "bg-[#f8fafc] border border-slate-200/90 text-[#283c50]"
                       }`}
                     >
-                      {m.text}
+                      {m.role === "agent" ? (
+                        <Markdown text={m.text} />
+                      ) : (
+                        <span className="whitespace-pre-wrap">{m.text}</span>
+                      )}
 
                       {/* Tool Calls Executadas */}
                       {m.tools && m.tools.length > 0 && (

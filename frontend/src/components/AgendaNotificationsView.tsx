@@ -121,16 +121,16 @@ export const AgendaNotificationsView: React.FC<
     <div className="p-4 md:p-6 max-w-[1440px] w-full mx-auto space-y-6">
       {/* BANNER SUPERIOR DE PERMISSÃO PUSH PWA & TESTE IMEDIATO */}
       <div
-        className={`duralux-card rounded-xl border p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 ${cardSurface}`}
+        className={`duralux-card rounded-xl border p-4 sm:p-5 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3 sm:gap-4 ${cardSurface}`}
       >
         <div className="flex items-start sm:items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-[#3454d1]/10 text-[#3454d1] flex items-center justify-center shrink-0">
+          <div className="hidden sm:flex w-12 h-12 rounded-xl bg-[#3454d1]/10 text-[#3454d1] items-center justify-center shrink-0">
             <BellRing className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="font-bold text-base">
-                Central de Notificações Inteligentes & Agenda (PWA Push)
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-bold text-sm sm:text-base">
+                Notificações & Agenda
               </h2>
               <span
                 className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
@@ -144,7 +144,7 @@ export const AgendaNotificationsView: React.FC<
                   : "Permissão Pendente"}
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">
+            <p className="hidden sm:block text-xs text-slate-400 mt-0.5">
               O aplicativo verifica sua grade de aulas (segunda a sexta) e entrevistas a cada minuto e envia notificações nativas no Windows/Celular + alerta sonoro.
             </p>
           </div>
@@ -172,12 +172,12 @@ export const AgendaNotificationsView: React.FC<
       </div>
 
       {/* BARRA DE AGENDAMENTO RÁPIDO POR CONVERSA COM O GEMINI */}
-      <div className={`duralux-card rounded-xl border p-5 space-y-3 ${cardSurface}`}>
+      <div className={`duralux-card rounded-xl border p-4 sm:p-5 space-y-3 ${cardSurface}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-[#3454d1]" />
             <h3 className="font-bold text-sm">
-              Configurar Grade de Aulas ou Entrevistas Falando com o Agente Gemini
+              Agendar Falando com o Agente
             </h3>
           </div>
           <span className="text-[11px] text-slate-400 hidden sm:inline">
@@ -185,7 +185,7 @@ export const AgendaNotificationsView: React.FC<
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex sm:flex-wrap gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
           {[
             "Tenho aula segunda e quarta de Inteligência Artificial às 19:00, me avise 30 minutos antes",
             "Tenho aula toda sexta-feira de Segurança da Informação às 19:00 na Sala 104",
@@ -195,7 +195,7 @@ export const AgendaNotificationsView: React.FC<
             <button
               key={example}
               onClick={() => onSendAICommand(example)}
-              className={`text-xs px-3 py-1.5 rounded-full border transition-colors hover:border-[#3454d1] ${subtleSurface}`}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors hover:border-[#3454d1] shrink-0 max-w-[260px] sm:max-w-none truncate sm:whitespace-normal text-left ${subtleSurface}`}
             >
               "{example}"
             </button>
@@ -209,18 +209,18 @@ export const AgendaNotificationsView: React.FC<
             onSendAICommand(aiSchedulePrompt.trim());
             setAiSchedulePrompt("");
           }}
-          className="flex gap-2 pt-1"
+          className="flex flex-col sm:flex-row gap-2 pt-1"
         >
           <input
             type="text"
             value={aiSchedulePrompt}
             onChange={(e) => setAiSchedulePrompt(e.target.value)}
-            placeholder="Digite para o Gemini configurar: ex. 'Tenho aula segunda a sexta: seg Cálculo às 19h, ter IA às 19h...' ou 'Tenho entrevista amanhã às 14h'..."
-            className={`flex-1 rounded-lg px-3.5 py-2 text-xs border focus:outline-none focus:border-[#3454d1] ${inputSurface}`}
+            placeholder="Ex: 'Tenho entrevista amanhã às 14h, me avise 1 dia antes'"
+            className={`flex-1 min-w-0 rounded-lg px-3.5 py-2 text-xs border focus:outline-none focus:border-[#3454d1] ${inputSurface}`}
           />
           <button
             type="submit"
-            className="bg-[#3454d1] hover:bg-[#2945b8] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-1.5 shrink-0"
+            className="bg-[#3454d1] hover:bg-[#2945b8] text-white px-4 py-2.5 sm:py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shrink-0"
           >
             <Send className="w-3.5 h-3.5" />
             Agendar com IA
@@ -229,7 +229,7 @@ export const AgendaNotificationsView: React.FC<
       </div>
 
       {/* GRADE HORÁRIA SEMANAL DE AULAS (SEGUNDA A SÁBADO) — VISUAL DURALUX */}
-      <div className={`duralux-card rounded-xl border p-6 space-y-4 ${cardSurface}`}>
+      <div className={`duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}>
         <div className="flex items-center justify-between">
           <div>
             <h3 className="font-bold text-[15px] flex items-center gap-2">
@@ -242,6 +242,11 @@ export const AgendaNotificationsView: React.FC<
           </div>
         </div>
 
+        {weeklyClasses.length === 0 && (
+          <p className={`sm:hidden text-xs text-slate-400 p-3 rounded-xl border ${subtleSurface}`}>
+            Nenhuma aula semanal cadastrada ainda.
+          </p>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3.5">
           {WEEKDAYS.map((day) => {
             const dayClasses = weeklyClasses.filter((c) =>
@@ -254,7 +259,9 @@ export const AgendaNotificationsView: React.FC<
             return (
               <div
                 key={day.code}
-                className={`rounded-xl border p-3.5 flex flex-col justify-between sm:min-h-[160px] ${subtleSurface}`}
+                className={`rounded-xl border p-3.5 flex-col justify-between sm:min-h-[160px] ${
+                  dayClasses.length === 0 ? "hidden sm:flex" : "flex"
+                } ${subtleSurface}`}
               >
                 <div>
                   <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-slate-200 dark:border-slate-800">
@@ -308,7 +315,7 @@ export const AgendaNotificationsView: React.FC<
       {/* GRID INFERIOR: FORMULÁRIO DE CONFIGURAÇÃO (5 COLS) + LISTA DE ENTREVISTAS E AGENDAMENTOS (7 COLS) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Coluna 1 (5 cols): Formulário Manual de Nova Notificação / Aula / Entrevista */}
-        <div className={`lg:col-span-5 duralux-card rounded-xl border p-6 space-y-4 ${cardSurface}`}>
+        <div className={`lg:col-span-5 duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}>
           <h3 className="font-bold text-[15px] flex items-center gap-2">
             <Plus className="w-4 h-4 text-[#3454d1]" />
             Novo Lembrete, Aula ou Entrevista
@@ -465,7 +472,7 @@ export const AgendaNotificationsView: React.FC<
         </div>
 
         {/* Coluna 2 (7 cols): Lista de Todas as Notificações, Entrevistas e Aulas Cadastradas */}
-        <div className={`lg:col-span-7 duralux-card rounded-xl border p-6 space-y-4 ${cardSurface}`}>
+        <div className={`lg:col-span-7 duralux-card rounded-xl border p-4 sm:p-6 space-y-4 ${cardSurface}`}>
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-bold text-[15px] flex items-center gap-2">
@@ -478,11 +485,11 @@ export const AgendaNotificationsView: React.FC<
             </div>
           </div>
 
-          <div className="space-y-3 max-h-[520px] overflow-y-auto">
+          <div className="space-y-3 sm:max-h-[520px] sm:overflow-y-auto">
             {schedules.map((item) => (
               <div
                 key={item.id}
-                className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${subtleSurface}`}
+                className={`rounded-xl border p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${subtleSurface}`}
               >
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">

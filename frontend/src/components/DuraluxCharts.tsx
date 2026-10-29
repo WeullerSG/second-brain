@@ -12,26 +12,25 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
   telemetry,
   darkMode,
 }) => {
-  // Dados mensais simulados + mês atual real para o gráfico estilo Duralux "Payment Record"
-  const currentIncome = finance?.total_income || 3800;
-  const currentExpenses =
-    (finance?.pending_bills || 0) + (finance?.paid_expenses || 0) || 1210;
+  // Últimos 6 meses com dados reais: entradas (salário + receitas) e saídas lançadas
+  const MONTH_ABBR = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
+  const now = new Date();
+  const records = finance?.records ?? [];
+  const salary = finance?.monthly_salary ?? 0;
+  const months = Array.from({ length: 6 }, (_, k) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - 5 + k, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const inMonth = records.filter((r) => (r.due_date || "").startsWith(key));
+    const extraIncome = inMonth
+      .filter((r) => r.record_type === "income" && r.category !== "salario")
+      .reduce((sum, r) => sum + r.amount, 0);
+    const expense = inMonth
+      .filter((r) => r.record_type === "expense" || r.record_type === "card_bill")
+      .reduce((sum, r) => sum + r.amount, 0);
+    return { label: MONTH_ABBR[d.getMonth()], income: salary + extraIncome, expense };
+  });
 
-  const months = [
-    { label: "MAI", income: 3400, expense: 1950, tokens: 12 },
-    { label: "JUN", income: 3600, expense: 2100, tokens: 19 },
-    { label: "JUL", income: 3500, expense: 1680, tokens: 24 },
-    { label: "AGO", income: 3800, expense: 2250, tokens: 31 },
-    { label: "SET", income: 3950, expense: 1840, tokens: 28 },
-    {
-      label: "OUT",
-      income: Math.max(currentIncome, 500),
-      expense: Math.max(currentExpenses, 300),
-      tokens: Math.min(100, Math.max(15, Math.round((telemetry?.usage_stats.total_tokens || 4500) / 200))),
-    },
-  ];
-
-  const maxVal = Math.max(...months.map((m) => Math.max(m.income, m.expense)), 4500);
+  const maxVal = Math.max(...months.map((m) => Math.max(m.income, m.expense)), 100);
 
   const totalBalance = finance?.total_balance ?? 0;
   const pendingBills = finance?.pending_bills ?? 0;
@@ -53,25 +52,21 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
       >
         <div>
           <h3 className="font-bold text-sm sm:text-[15px] tracking-tight">
-            Fluxo Financeiro & Atividade do Agente
+            Fluxo Financeiro
           </h3>
           <p className="text-xs text-slate-400 mt-0.5">
-            Comparativo mensal de Receitas, Contas de Cartão e Interações IA
+            Entradas e saídas dos últimos 6 meses
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-[11px] sm:text-xs font-medium">
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#3454d1]" />
-            Receitas
+            Entradas
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-[#ea4d4d]" />
-            Contas & Cartão
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#17c666]" />
-            Índice IA
+            Saídas
           </span>
         </div>
       </div>
@@ -96,8 +91,8 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
           </div>
 
           {months.map((m) => {
-            const incHeight = Math.max(8, Math.round((m.income / maxVal) * 170));
-            const expHeight = Math.max(8, Math.round((m.expense / maxVal) * 170));
+            const incHeight = m.income > 0 ? Math.max(4, Math.round((m.income / maxVal) * 170)) : 0;
+            const expHeight = m.expense > 0 ? Math.max(4, Math.round((m.expense / maxVal) * 170)) : 0;
             return (
               <div
                 key={m.label}
@@ -138,18 +133,12 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
           <div className="text-base font-bold mt-1">
             R$ {totalBalance.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
           </div>
-          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
-            <div className="h-full bg-[#3454d1] rounded-full" style={{ width: "78%" }} />
-          </div>
         </div>
 
         <div className="p-4">
           <div className="text-xs text-slate-400 font-medium">Faturas Aguardando</div>
           <div className="text-base font-bold mt-1">
             R$ {pendingBills.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-          </div>
-          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
-            <div className="h-full bg-[#ffa21d] rounded-full" style={{ width: "54%" }} />
           </div>
         </div>
 
@@ -161,18 +150,12 @@ export const PaymentAndUsageChart: React.FC<PaymentChartProps> = ({
               minimumFractionDigits: 2,
             })}
           </div>
-          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
-            <div className="h-full bg-[#17c666] rounded-full" style={{ width: "68%" }} />
-          </div>
         </div>
 
         <div className="p-4">
           <div className="text-xs text-slate-400 font-medium">Tokens IA Utilizados</div>
           <div className="text-base font-bold mt-1">
             {totalTokens.toLocaleString("pt-BR")}
-          </div>
-          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full mt-2.5 overflow-hidden">
-            <div className="h-full bg-[#3dc7be] rounded-full" style={{ width: "62%" }} />
           </div>
         </div>
       </div>

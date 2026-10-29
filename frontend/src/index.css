@@ -63,3 +63,11 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(52, 84, 209, 0.7);
 }
+
+/* Rolagem horizontal sem barra visível (carrosséis no celular) */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
