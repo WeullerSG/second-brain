@@ -99,7 +99,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2)} ${units[i]}`;
 }
 
-export default function App() {
+export default function App({ username, onLogout }: { username: string; onLogout: () => void }) {
   // Duralux Skin State (Light Mode by default, like duralux-react-dashboard.vercel.app, with Dark Skin toggle)
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     try {
@@ -141,6 +141,9 @@ export default function App() {
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [settingsModelDraft, setSettingsModelDraft] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwMessage, setPwMessage] = useState<string | null>(null);
 
   // Data States
   const [finance, setFinance] = useState<FinanceSummary | null>(null);
@@ -713,8 +716,11 @@ export default function App() {
 
             <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
               <a
-                href={api.getFineTuneExportUrl()}
-                download="second_brain_gemini_finetune.jsonl"
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  api.downloadFineTuneExport().catch((err) => window.alert(err.message));
+                }}
                 className="w-full py-2.5 px-3 rounded-lg bg-[#3454d1]/10 text-[#3454d1] font-bold text-xs flex items-center justify-center gap-1.5"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -904,8 +910,11 @@ export default function App() {
                 />
               </div>
               <a
-                href={api.getFineTuneExportUrl()}
-                download="second_brain_gemini_finetune.jsonl"
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  api.downloadFineTuneExport().catch((err) => window.alert(err.message));
+                }}
                 className="w-full py-2 px-3 rounded-lg bg-[#3454d1] hover:bg-[#2945b8] text-white font-semibold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-colors"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1068,7 +1077,7 @@ export default function App() {
                 <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-[#17c666] border-2 border-white dark:border-slate-900 absolute -bottom-0.5 -right-0.5" />
               </div>
               <div className="hidden sm:block leading-tight">
-                <div className="text-xs font-bold">Weuller</div>
+                <div className="text-xs font-bold capitalize">{username}</div>
                 <div className="text-[10px] text-slate-400 font-medium">
                   Second Brain Admin
                 </div>
@@ -1885,6 +1894,57 @@ export default function App() {
                 <p className="text-[11px] text-slate-400">
                   Se o modelo escolhido falhar, o agente tenta automaticamente um modelo reserva.
                 </p>
+              </div>
+
+              <div className="space-y-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Conta ({username})
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="Senha atual"
+                    value={pwCurrent}
+                    onChange={(e) => setPwCurrent(e.target.value)}
+                    className={`rounded-lg px-3 py-2 text-xs border ${inputSurface}`}
+                  />
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Nova senha (mín. 8)"
+                    value={pwNew}
+                    onChange={(e) => setPwNew(e.target.value)}
+                    className={`rounded-lg px-3 py-2 text-xs border ${inputSurface}`}
+                  />
+                </div>
+                {pwMessage && <p className="text-[11px] text-slate-400">{pwMessage}</p>}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={!pwCurrent || pwNew.length < 8}
+                    onClick={async () => {
+                      try {
+                        await api.changePassword(pwCurrent, pwNew);
+                        setPwCurrent("");
+                        setPwNew("");
+                        setPwMessage("✅ Senha alterada. Outros aparelhos foram desconectados.");
+                      } catch (err: any) {
+                        setPwMessage(`❌ ${err.message || err}`);
+                      }
+                    }}
+                    className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-bold disabled:opacity-40"
+                  >
+                    Trocar senha
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onLogout}
+                    className="px-3 py-2 rounded-lg text-xs font-bold text-[#ea4d4d] border border-[#ea4d4d]/40 hover:bg-[#ea4d4d]/10"
+                  >
+                    Sair da conta
+                  </button>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">

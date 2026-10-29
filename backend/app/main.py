@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import SessionLocal, init_db
+from app.services.auth import get_user_by_token, token_from_header
 from app.models import (
     AcademicTask,
     FinanceAccount,
@@ -12,7 +14,7 @@ from app.models import (
     MemoryFact,
     ScheduleNotification,
 )
-from app.routers import academic, app_settings, chat, documents, finances, memories, notifications, telemetry
+from app.routers import academic, app_settings, auth as auth_router, chat, documents, finances, memories, notifications, telemetry
 
 
 # Dados de exemplo antigos (versões anteriores populavam o banco com eles sempre que
@@ -86,14 +88,37 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Rotas da API que funcionam sem login
+PUBLIC_API_PATHS = {"/api/health", "/api/auth/status", "/api/auth/setup", "/api/auth/login", "/api/auth/logout"}
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    """Bloqueia toda a API para quem não estiver logado."""
+    path = request.url.path
+    if request.method == "OPTIONS" or not path.startswith("/api/") or path in PUBLIC_API_PATHS:
+        return await call_next(request)
+    db = SessionLocal()
+    try:
+        user = get_user_by_token(db, token_from_header(request.headers.get("authorization")))
+    finally:
+        db.close()
+    if user is None:
+        return JSONResponse(status_code=401, content={"detail": "Login necessário."})
+    request.state.user_id = user.id
+    return await call_next(request)
+
+
+# Adicionado depois do require_login para ficar por fora (respostas 401 também levam os cabeçalhos CORS)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.include_router(auth_router.router)
 app.include_router(chat.router)
 app.include_router(memories.router)
 app.include_router(finances.router)
@@ -109,6 +134,4 @@ def health_check():
     return {
         "status": "ok",
         "service": "second-brain-ai",
-        "agent_model": settings.GEMINI_AGENT_MODEL,
-        "embedding_model": settings.GEMINI_EMBEDDING_MODEL,
     }

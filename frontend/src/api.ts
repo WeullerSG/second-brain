@@ -16,21 +16,63 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || "/api";
 
+// ---------- Sessão de login ----------
+const TOKEN_KEY = "sb_token";
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // armazenamento indisponível: a sessão dura só enquanto a aba estiver aberta
+  }
+}
+
+/** Avisado quando o servidor responde 401 (sessão expirada ou inválida). */
+export const UNAUTHORIZED_EVENT = "sb-unauthorized";
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function errorMessage(res: Response): Promise<string> {
+  const text = await res.text();
+  try {
+    const detail = JSON.parse(text)?.detail;
+    if (typeof detail === "string") return detail;
+  } catch {
+    // resposta não é JSON
+  }
+  return text || `HTTP Error ${res.status}`;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 120000);
   try {
     const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
       headers: {
         "Content-Type": "application/json",
-        ...(options?.headers || {}),
+        ...authHeaders(),
+        ...((options?.headers as Record<string, string>) || {}),
       },
       signal: controller.signal,
-      ...options,
     });
+    if (res.status === 401 && !path.startsWith("/auth/")) {
+      window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    }
     if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(errText || `HTTP Error ${res.status}`);
+      throw new Error(await errorMessage(res));
     }
     return res.json();
   } finally {
@@ -39,6 +81,26 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  // Login
+  authStatus: () =>
+    request<{ has_user: boolean; authenticated: boolean; username: string | null }>("/auth/status"),
+  setupAccount: (username: string, password: string) =>
+    request<{ token: string; username: string }>("/auth/setup", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  login: (username: string, password: string) =>
+    request<{ token: string; username: string }>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ username, password }),
+    }),
+  logout: () => request("/auth/logout", { method: "POST" }),
+  changePassword: (current_password: string, new_password: string) =>
+    request("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+
   // Chat Agent
   sendChat: (payload: {
     message: string;
@@ -263,9 +325,11 @@ export const api = {
     form.append("category", category);
     const res = await fetch(`${API_BASE}/documents/upload`, {
       method: "POST",
+      headers: authHeaders(),
       body: form,
     });
-    if (!res.ok) throw new Error(await res.text());
+    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    if (!res.ok) throw new Error(await errorMessage(res));
     return res.json();
   },
   getDocumentChunks: (docId: number) =>
@@ -295,7 +359,18 @@ export const api = {
     }),
   deleteFineTuneExample: (id: number) =>
     request(`/telemetry/finetune/examples/${id}`, { method: "DELETE" }),
-  getFineTuneExportUrl: () => `${API_BASE}/telemetry/finetune/export.jsonl`,
+  /** Baixa o dataset .jsonl (precisa do token, por isso não é um link direto). */
+  downloadFineTuneExport: async () => {
+    const res = await fetch(`${API_BASE}/telemetry/finetune/export.jsonl`, { headers: authHeaders() });
+    if (res.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
+    if (!res.ok) throw new Error(await errorMessage(res));
+    const url = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "second_brain_gemini_finetune.jsonl";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
 
   // Schedule & Notifications (Agenda de Aulas, Entrevistas e Lembretes)
   getNotifications: () => request<ScheduleNotificationItem[]>("/notifications"),

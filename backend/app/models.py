@@ -219,3 +219,23 @@ class AppSetting(Base):
     key = Column(String(80), primary_key=True)
     value = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class User(Base):
+    """Usuário do app (login). O app é pessoal: só existe um."""
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(60), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=utcnow)
+
+
+class AuthSession(Base):
+    """Sessão de login (guarda só o hash do token)."""
+    __tablename__ = "auth_sessions"
+
+    token_hash = Column(String(64), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=utcnow)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
