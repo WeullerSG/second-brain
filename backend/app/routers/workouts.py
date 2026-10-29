@@ -739,6 +739,7 @@ def list_exercises(
                 common_mistakes=ex.common_mistakes,
                 video_url=ex.video_url or SMARTWORKOUT_URL,
                 image_urls=ex.image_urls or [],
+                youtube_url=ex.youtube_url,
                 is_custom=bool(ex.is_custom),
                 personal_record_kg=float(st.get("personal_record_kg", 0.0)),
                 last_weight_kg=float(st.get("last_weight_kg", 0.0)),
@@ -794,6 +795,30 @@ def create_custom_exercise(payload: WorkoutExerciseCreate, db: Session = Depends
         is_custom=True,
         created_at=ex.created_at,
     )
+
+
+class ExerciseVideoUpdate(BaseModel):
+    youtube_url: Optional[str] = None  # vazio remove o vídeo
+
+
+_YOUTUBE_ID = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\.be/)([A-Za-z0-9_-]{11})")
+
+
+@router.put("/exercises/{exercise_id}/video")
+def set_exercise_video(exercise_id: int, payload: ExerciseVideoUpdate, db: Session = Depends(get_db)):
+    """Associa um vídeo do YouTube ao exercício (só links do YouTube, que permite incorporar)."""
+    ex = db.query(WorkoutExercise).filter(WorkoutExercise.id == exercise_id).first()
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exercício não encontrado")
+    url = (payload.youtube_url or "").strip()
+    if url:
+        m = _YOUTUBE_ID.search(url)
+        if not m:
+            raise HTTPException(status_code=400, detail="Cole um link do YouTube (youtube.com ou youtu.be).")
+        url = f"https://www.youtube.com/watch?v={m.group(1)}"
+    ex.youtube_url = url or None
+    db.commit()
+    return {"id": ex.id, "youtube_url": ex.youtube_url}
 
 
 @router.delete("/exercises/{exercise_id}")

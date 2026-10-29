@@ -20,6 +20,7 @@ import {
 import { api } from "../api";
 import { Markdown } from "./Markdown";
 import { ExerciseAnimation } from "./ExerciseAnimation";
+import { ExerciseDetailModal } from "./ExerciseDetailModal";
 import type {
   AgentProfile,
   WorkoutExercise,
@@ -132,6 +133,9 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
   const [suggestion, setSuggestion] = useState<TodayWorkoutSuggestion | null>(null);
   const [loadingSuggestion, setLoadingSuggestion] = useState(false);
   const [quickText, setQuickText] = useState("");
+  // Exercício aberto na janela de detalhe (como executar, vídeo)
+  const [detailExerciseId, setDetailExerciseId] = useState<number | null>(null);
+  const detailExercise = exercises.find((x) => x.id === detailExerciseId) || null;
 
   // Rotina semanal (segunda a sexta, com cardio)
   const [routine, setRoutine] = useState<WorkoutPlan[]>([]);
@@ -313,6 +317,15 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
       : exercises.find(
           (x) => x.id === item.exercise_id || x.name.toLowerCase() === item.exercise_name.toLowerCase()
         )?.image_urls;
+
+  const findExercise = (item: { exercise_id?: number | null; exercise_name: string }) =>
+    exercises.find(
+      (x) => x.id === item.exercise_id || x.name.toLowerCase() === item.exercise_name.toLowerCase()
+    );
+  const openDetail = (item: { exercise_id?: number | null; exercise_name: string }) => {
+    const ex = findExercise(item);
+    return ex ? () => setDetailExerciseId(ex.id) : undefined;
+  };
 
   const applySuggestion = (sug: TodayWorkoutSuggestion) => {
     setSessionTitle(sug.title);
@@ -965,7 +978,7 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                       setQuickPickExerciseId("");
                     }
                   }}
-                  className={`flex-1 rounded-lg px-3 py-2 text-xs border font-semibold ${inputSurface}`}
+                  className={`flex-1 min-w-0 w-full rounded-lg px-3 py-2 text-xs border font-semibold ${inputSurface}`}
                 >
                   <option value="">
                     ➕ Adicionar exercício da Biblioteca SmartWorkout ({exercises.length} disponíveis)...
@@ -1032,6 +1045,7 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                             images={imagesFor(item)}
                             alt={item.exercise_name}
                             className="w-14 h-14 rounded-lg border border-slate-200 dark:border-slate-700"
+                            onClick={openDetail(item)}
                           />
                           <div className="flex-1 min-w-0">
                           <label className="block text-[10px] font-bold text-slate-400 truncate">
@@ -1609,6 +1623,7 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                             images={imagesFor({ exercise_id: pe.exercise_id, exercise_name: pe.exercise_name })}
                             alt={pe.exercise_name}
                             className="w-8 h-8 rounded-md"
+                            onClick={openDetail({ exercise_id: pe.exercise_id, exercise_name: pe.exercise_name })}
                           />
                           <div className="min-w-0">
                             <div className="text-[11px] font-semibold leading-tight line-clamp-2">{pe.exercise_name}</div>
@@ -2249,6 +2264,7 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
                   images={ex.image_urls}
                   alt={ex.name}
                   className="w-full aspect-[4/3] rounded-lg border border-slate-200 dark:border-slate-700"
+                  onClick={() => setDetailExerciseId(ex.id)}
                 />
                 <div className="space-y-2.5">
                   <div className="flex items-start justify-between gap-2">
@@ -2368,6 +2384,14 @@ export const WorkoutsSection: React.FC<WorkoutsSectionProps> = ({
             ))}
           </div>
         </div>
+      )}
+      {detailExercise && (
+        <ExerciseDetailModal
+          exercise={detailExercise}
+          darkMode={darkMode}
+          onClose={() => setDetailExerciseId(null)}
+          onSaved={onRefresh}
+        />
       )}
     </div>
   );

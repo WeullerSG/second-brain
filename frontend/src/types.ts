@@ -398,6 +398,7 @@ export interface WorkoutExercise {
   common_mistakes?: string | null;
   video_url?: string | null;
   image_urls?: string[];
+  youtube_url?: string | null;
   is_custom: boolean;
   personal_record_kg: number;
   last_weight_kg: number;

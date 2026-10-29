@@ -258,6 +258,7 @@ class WorkoutExercise(Base):
     common_mistakes = Column(Text, nullable=True)
     video_url = Column(String(300), nullable=True)
     image_urls = Column(JSON, nullable=True)  # fotos da execução (free-exercise-db), alternadas como animação
+    youtube_url = Column(String(300), nullable=True)  # vídeo de demonstração escolhido pelo usuário (incorporado)
     is_custom = Column(Boolean, default=False)
     created_at = Column(DateTime, default=utcnow)
 

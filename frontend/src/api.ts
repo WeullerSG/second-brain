@@ -535,6 +535,11 @@ export const api = {
     request<{ status: string }>(`/workouts/sessions/${id}`, {
       method: "DELETE",
     }),
+  setExerciseVideo: (exerciseId: number, youtubeUrl: string) =>
+    request<{ id: number; youtube_url: string | null }>(`/workouts/exercises/${exerciseId}/video`, {
+      method: "PUT",
+      body: JSON.stringify({ youtube_url: youtubeUrl }),
+    }),
   suggestTodayWorkout: () => request<TodayWorkoutSuggestion>("/workouts/suggest-today"),
   /** Treino sob medida: "tenho 30 minutos e quero treinar só peito". */
   quickWorkout: (data: { text?: string; minutes?: number; muscle_groups?: string[]; include_cardio?: boolean }) =>

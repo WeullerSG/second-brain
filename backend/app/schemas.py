@@ -349,6 +349,7 @@ class WorkoutExerciseOut(BaseModel):
     common_mistakes: Optional[str] = None
     video_url: Optional[str] = None
     image_urls: list[str] = Field(default_factory=list)
+    youtube_url: Optional[str] = None
     is_custom: bool = False
     personal_record_kg: float = 0.0
     last_weight_kg: float = 0.0
